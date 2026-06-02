@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Distribuirani senzorski čvor — Dokumentacija i priprema za odbranu</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#162033;
+    --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --accent2:#22d3ee;
+    --green:#4ade80; --yellow:#facc15; --red:#f87171; --border:#334155;
+    --code-bg:#0b1220;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:#f1f5f9; color:#0f172a; line-height:1.65;
+  }
+  /* Layout */
+  .wrap{display:flex; max-width:1400px; margin:0 auto; background:#fff;}
+  nav.toc{
+    width:300px; flex-shrink:0; background:var(--bg); color:var(--text);
+    position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto;
+    padding:24px 18px;
+  }
+  nav.toc h2{font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--accent); margin:18px 0 8px;}
+  nav.toc h2:first-child{margin-top:0;}
+  nav.toc a{display:block; color:var(--muted); text-decoration:none; font-size:14px; padding:5px 10px; border-radius:6px; transition:.15s;}
+  nav.toc a:hover{background:var(--panel); color:#fff;}
+  main{flex:1; padding:40px 56px; min-width:0;}
+  /* Header */
+  header.hero{
+    background:linear-gradient(135deg,#0ea5e9,#2563eb); color:#fff;
+    padding:48px 56px; margin:-40px -56px 40px;
+  }
+  header.hero .tag{display:inline-block; background:rgba(255,255,255,.2); padding:4px 12px; border-radius:20px; font-size:13px; font-weight:600; margin-bottom:14px;}
+  header.hero h1{margin:0 0 8px; font-size:34px; line-height:1.2;}
+  header.hero p{margin:4px 0; opacity:.95;}
+  header.hero .team{margin-top:18px; font-size:14px; opacity:.9;}
+  /* Typography */
+  h2.section{font-size:26px; margin:48px 0 16px; padding-bottom:10px; border-bottom:3px solid var(--accent); color:#0c4a6e;}
+  h3{font-size:20px; color:#0e7490; margin:28px 0 10px;}
+  h4{font-size:16px; color:#155e75; margin:20px 0 6px;}
+  p{margin:10px 0;}
+  ul,ol{margin:10px 0; padding-left:24px;}
+  li{margin:6px 0;}
+  code.inline{background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-family:Consolas,Monaco,monospace; font-size:.9em;}
+  /* Code blocks */
+  pre{
+    background:var(--code-bg); color:#e2e8f0; padding:18px 20px; border-radius:10px;
+    overflow-x:auto; font-family:Consolas,Monaco,"Courier New",monospace; font-size:13.5px;
+    line-height:1.55; border:1px solid var(--border); margin:14px 0;
+  }
+  pre .c{color:#64748b; font-style:italic;}     /* komentar */
+  pre .k{color:#c084fc;}                          /* keyword */
+  pre .s{color:#86efac;}                          /* string */
+  pre .n{color:#fca5a5;}                          /* broj */
+  pre .f{color:#7dd3fc;}                          /* funkcija */
+  .codecap{font-size:13px; color:var(--muted); background:var(--panel2); color:#cbd5e1; padding:6px 14px; border-radius:8px 8px 0 0; font-family:Consolas,monospace; margin:14px 0 -14px;}
+  .codecap + pre{border-top-left-radius:0; border-top-right-radius:0; margin-top:0;}
+  /* Callouts */
+  .note,.tip,.warn,.q{padding:14px 18px; border-radius:8px; margin:16px 0; border-left:5px solid;}
+  .note{background:#eff6ff; border-color:#3b82f6;}
+  .tip{background:#f0fdf4; border-color:#22c55e;}
+  .warn{background:#fef2f2; border-color:#ef4444;}
+  .note b,.tip b,.warn b{display:block; margin-bottom:4px;}
+  /* Tables */
+  table{border-collapse:collapse; width:100%; margin:16px 0; font-size:14.5px;}
+  th,td{border:1px solid #cbd5e1; padding:10px 12px; text-align:left; vertical-align:top;}
+  th{background:#0c4a6e; color:#fff;}
+  tr:nth-child(even) td{background:#f8fafc;}
+  /* Diagram */
+  .diagram{background:var(--code-bg); color:#e2e8f0; border-radius:10px; padding:24px; font-family:Consolas,monospace; font-size:13px; line-height:1.7; overflow-x:auto; white-space:pre; border:1px solid var(--border);}
+  /* Q&A */
+  .qa{background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:4px 20px; margin:16px 0;}
+  .qa details{margin:10px 0; border-bottom:1px solid #fde68a; padding-bottom:8px;}
+  .qa details:last-child{border-bottom:none;}
+  .qa summary{cursor:pointer; font-weight:600; color:#92400e; padding:8px 0; font-size:15px;}
+  .qa summary:hover{color:#b45309;}
+  .qa details p{margin:6px 0 10px; color:#1f2937;}
+  .badge{display:inline-block; padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600;}
+  .b-green{background:#dcfce7; color:#166534;}
+  .b-yellow{background:#fef9c3; color:#854d0e;}
+  .b-red{background:#fee2e2; color:#991b1b;}
+  .flow-step{display:flex; gap:14px; margin:14px 0; align-items:flex-start;}
+  .flow-num{flex-shrink:0; width:32px; height:32px; border-radius:50%; background:#0ea5e9; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700;}
+  footer{margin-top:60px; padding-top:20px; border-top:1px solid #cbd5e1; color:#64748b; font-size:13px;}
+  @media (max-width:980px){
+    nav.toc{display:none;}
+    main{padding:24px;}
+    header.hero{margin:-24px -24px 24px; padding:32px 24px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ============ SIDEBAR ============ -->
+<nav class="toc">
+  <h2>Teorija</h2>
+  <a href="#iot">1. Šta je IoT</a>
+  <a href="#principi">2. Principi i slojevi IoT</a>
+  <a href="#mqtt">3. MQTT protokol</a>
+  <a href="#broker">4. Broker (Mosquitto)</a>
+  <a href="#nodered">5. Node-RED</a>
+  <h2>Projekat</h2>
+  <a href="#arh">6. Arhitektura sistema</a>
+  <a href="#cvorovi">7. Senzorski čvorovi (kod)</a>
+  <a href="#server">8. Server (obrada + baza)</a>
+  <a href="#komunikacija">9. Tok komunikacije</a>
+  <a href="#dashboard">10. Izrada dashboarda</a>
+  <a href="#tehnologije">11. Tehnologije</a>
+  <h2>Odbrana</h2>
+  <a href="#pitanja">12. Moguća potpitanja</a>
+  <a href="#recnik">13. Rečnik pojmova</a>
+</nav>
+
+<!-- ============ MAIN ============ -->
+<main>
+<header class="hero">
+  <span class="tag">IoT • Tema 9</span>
+  <h1>Distribuirani senzorski čvor</h1>
+  <p>Tehnička dokumentacija i priprema za odbranu projekta</p>
+  <p>Predmet: Internet of Things &nbsp;·&nbsp; Profesor: dr Aleksandar Peulić</p>
+  <div class="team">
+    Stefan Grujičić (40/2022) · Mateja Planić (81/2022) · Mihailo Obradović (79/2022) · Aleksandar Golubović (43/2022)
+  </div>
+</header>
+
+<div class="note">
+  <b>Šta je ovaj projekat ukratko?</b>
+  Simulacioni IoT sistem: tri senzorska čvora (Python skripte) generišu vrednosti i šalju ih
+  MQTT protokolom preko Mosquitto brokera. Server ih obrađuje (min/max/prosek + upozorenja) i
+  skladišti u SQLite bazu, a Node-RED dashboard ih prikazuje u realnom vremenu (gauge + grafovi).
+</div>
+
+<!-- 1. IoT -->
+<h2 class="section" id="iot">1. Šta je IoT (Internet of Things)</h2>
+<p>
+  <b>Internet of Things (Internet stvari)</b> je mreža fizičkih uređaja — senzora, aktuatora,
+  mikrokontrolera, uređaja — koji prikupljaju podatke iz okruženja, razmenjuju ih preko mreže i
+  na osnovu njih donose ili omogućavaju donošenje odluka, bez stalne intervencije čoveka.
+</p>
+<p>Tipičan IoT sistem uvek ima ove faze:</p>
+<ul>
+  <li><b>Prikupljanje podataka</b> — senzori mere fizičke veličine (temperatura, vlaga, svetlost…).</li>
+  <li><b>Obrada</b> — na uređaju (embedded), na ivici mreže (edge) ili na serveru.</li>
+  <li><b>Komunikacija</b> — prenos podataka bežično ili žično (WiFi, MQTT, LoRa…).</li>
+  <li><b>Skladištenje i vizualizacija</b> — čuvanje u bazi i prikaz na dashboardu.</li>
+  <li><b>(Opciono) primena algoritama</b> — analiza, predikcija, mašinsko učenje.</li>
+</ul>
+<div class="tip">
+  <b>U našem projektu:</b> prikupljanje = 3 simulirana čvora · obrada = server.py (statistika + alarmi) ·
+  komunikacija = MQTT · skladištenje = SQLite · vizualizacija = Node-RED dashboard.
+</div>
+
+<!-- 2. Principi i slojevi -->
+<h2 class="section" id="principi">2. Principi i slojevi IoT arhitekture</h2>
+<p>
+  IoT sistemi se klasično opisuju kroz <b>tri sloja</b>. Ovo je ključan koncept — naš projekat je
+  organizovan tačno po ovoj podeli.
+</p>
+<table>
+  <tr><th>Sloj</th><th>Uloga</th><th>U našem projektu</th></tr>
+  <tr>
+    <td><b>Sloj percepcije</b><br>(Perception / Sensing)</td>
+    <td>„Oseti" svet — senzori prikupljaju podatke o fizičkim veličinama.</td>
+    <td>Tri čvora: <code class="inline">cvor1.py</code> (temperatura), <code class="inline">cvor2.py</code> (vlaga), <code class="inline">cvor3.py</code> (svetlost).</td>
+  </tr>
+  <tr>
+    <td><b>Mrežni / komunikacioni sloj</b><br>(Network)</td>
+    <td>Prenosi podatke od senzora do servera/aplikacije.</td>
+    <td>MQTT protokol + Mosquitto broker (port 1883).</td>
+  </tr>
+  <tr>
+    <td><b>Aplikacioni sloj</b><br>(Application)</td>
+    <td>Obrada, skladištenje i prikaz podataka krajnjem korisniku.</td>
+    <td>server.py (obrada + SQLite baza) i Node-RED dashboard (vizualizacija).</td>
+  </tr>
+</table>
+<p>Najvažniji principi koje sistem demonstrira:</p>
+<ul>
+  <li><b>Distribuiranost</b> — više nezavisnih čvorova radi paralelno i šalje podatke ka centralnoj tački.</li>
+  <li><b>Skalabilnost</b> — novi čvor se dodaje bez izmene postojećih (samo se pretplatiš na novi topic).</li>
+  <li><b>Labava povezanost (decoupling)</b> — pošiljalac i primalac se ne poznaju direktno; broker ih razdvaja.</li>
+  <li><b>Rad u realnom vremenu</b> — podaci se prikazuju čim stignu (kašnjenje &lt; 1 s).</li>
+</ul>
+
+<!-- 3. MQTT -->
+<h2 class="section" id="mqtt">3. MQTT protokol</h2>
+<p>
+  <b>MQTT (Message Queuing Telemetry Transport)</b> je lagani protokol za razmenu poruka,
+  napravljen baš za IoT — za uređaje sa malo resursa i mreže sa malim propusnim opsegom.
+  Radi preko TCP/IP-a, podrazumevani port je <b>1883</b> (bez enkripcije) ili 8883 (sa TLS-om).
+</p>
+
+<h3>Publish / Subscribe model</h3>
+<p>
+  MQTT <u>ne</u> radi po klasičnom „klijent traži, server odgovara" (request/response) modelu.
+  Umesto toga koristi <b>publish/subscribe</b>:
+</p>
+<ul>
+  <li><b>Publisher (objavljivač)</b> šalje poruku na neku <b>temu (topic)</b> — npr. naši čvorovi.</li>
+  <li><b>Subscriber (pretplatnik)</b> se pretplati na temu i prima sve poruke s nje — npr. Node-RED i server.</li>
+  <li>Publisher i subscriber se <b>ne poznaju</b> i ne moraju biti aktivni u isto vreme — sve ide preko brokera.</li>
+</ul>
+
+<h3>Topic (tema)</h3>
+<p>
+  Tema je hijerarhijski tekstualni „kanal", nivoi se razdvajaju kosom crtom <code class="inline">/</code>.
+  Naše teme:
+</p>
+<pre>iot/cvor1/temperatura
+iot/cvor2/vlaga
+iot/cvor3/svetlost</pre>
+<p>
+  Pretplatnik se može pretplatiti na tačnu temu, ili koristiti džokere:
+  <code class="inline">+</code> (jedan nivo, npr. <code class="inline">iot/+/temperatura</code>) i
+  <code class="inline">#</code> (svi nivoi, npr. <code class="inline">iot/#</code> = sve naše teme).
+</p>
+
+<h3>QoS (Quality of Service) — nivo pouzdanosti isporuke</h3>
+<table>
+  <tr><th>QoS</th><th>Značenje</th><th>Garancija</th></tr>
+  <tr><td><b>0</b></td><td>„At most once" — pošalji i zaboravi</td><td>Poruka može da se izgubi (bez potvrde).</td></tr>
+  <tr><td><b>1</b></td><td>„At least once"</td><td>Poruka sigurno stiže, ali može i duplo.</td></tr>
+  <tr><td><b>2</b></td><td>„Exactly once"</td><td>Stiže tačno jednom (najsporije, najpouzdanije).</td></tr>
+</table>
+<div class="note">
+  <b>U našem flows.json:</b> MQTT In čvorovi koriste <code class="inline">qos: 2</code>.
+  Python čvorovi šalju sa podrazumevanim QoS 0. Za demo sa podacima na svake 3 s to je sasvim dovoljno.
+</div>
+
+<h3>Zašto MQTT za IoT?</h3>
+<ul>
+  <li><b>Lagan</b> — minimalno zaglavlje (svega par bajtova), mala potrošnja baterije i podataka.</li>
+  <li><b>Decoupling</b> — lako dodavanje/uklanjanje uređaja bez menjanja ostatka sistema.</li>
+  <li><b>Pouzdanost</b> — QoS nivoi, „last will" poruka kada uređaj ispadne, retain poruke.</li>
+</ul>
+
+<!-- 4. Broker -->
+<h2 class="section" id="broker">4. Broker — Eclipse Mosquitto</h2>
+<p>
+  <b>Broker</b> je centralni server MQTT sistema — posrednik kroz koga prolaze sve poruke.
+  Mi koristimo <b>Eclipse Mosquitto</b>, koji radi lokalno kao Windows servis na portu 1883.
+</p>
+<p>Šta broker radi:</p>
+<ol>
+  <li>Prima konekcije od svih klijenata (i objavljivača i pretplatnika).</li>
+  <li>Vodi evidenciju ko je na koju temu pretplaćen.</li>
+  <li>Kada stigne poruka na neku temu — <b>prosleđuje je svim pretplatnicima</b> te teme.</li>
+</ol>
+<div class="tip">
+  <b>Analogija:</b> broker je kao poštanski sortirni centar. Čvor pošalje „pismo" sa adresom
+  (temom), a broker ga isporuči svima koji su se „pretplatili" na tu adresu. Pošiljalac ne zna
+  ko su primaoci, niti ima li ih uopšte.
+</div>
+
+<!-- 5. Node-RED -->
+<h2 class="section" id="nodered">5. Node-RED</h2>
+<p>
+  <b>Node-RED</b> je vizuelni alat za programiranje IoT tokova podataka, zasnovan na Node.js-u.
+  Umesto pisanja koda, logiku praviš povezivanjem <b>čvorova (nodes)</b> u <b>tok (flow)</b> —
+  prevlačenjem i spajanjem žicama u editoru u browseru (<code class="inline">http://localhost:1880</code>).
+</p>
+<p>Tipovi čvorova koje koristimo:</p>
+<ul>
+  <li><b>MQTT In</b> — pretplaćuje se na MQTT temu i ubacuje primljene poruke u tok.</li>
+  <li><b>ui-gauge</b> — prikazuje trenutnu vrednost kao polukružni merač (brzinomer).</li>
+  <li><b>ui-chart</b> — prikazuje vrednosti kroz vreme kao linijski grafik.</li>
+</ul>
+<p>
+  Dashboard se dobija dodatkom (plugin) <code class="inline">@flowfuse/node-red-dashboard</code> i
+  dostupan je na <code class="inline">http://localhost:1880/dashboard</code>.
+</p>
+
+<!-- 6. Arhitektura -->
+<h2 class="section" id="arh">6. Arhitektura sistema</h2>
+<div class="diagram">┌─────────────┐
+│  cvor1.py   │  temperatura ─┐
+│ (Python)    │   18–28 °C    │
+└─────────────┘               │
+┌─────────────┐               │   publish              ┌──────────────────┐
+│  cvor2.py   │  vlaga ───────┼──────────────────────▶ │                  │
+│ (Python)    │   40–80 %     │   iot/cvorX/...        │    MOSQUITTO     │
+└─────────────┘               │                        │   MQTT BROKER    │
+┌─────────────┐               │                        │   (port 1883)    │
+│  cvor3.py   │  svetlost ────┘                        └────────┬─────────┘
+│ (Python)    │  100–1000 lux                                   │ prosleđuje
+└─────────────┘                                                 │ pretplatnicima
+                                                                │
+                          ┌─────────────────────────────────────┼───────────────────┐
+                          │ subscribe                            │ subscribe          │
+                          ▼                                      ▼
+                 ┌──────────────────┐                  ┌──────────────────┐
+                 │   server.py      │                  │    NODE-RED      │
+                 │ obrada + alarmi  │                  │   DASHBOARD      │
+                 │  → SQLite baza   │                  │ gauge + grafovi  │
+                 │  (merenja.db)    │                  │ (port 1880)      │
+                 └──────────────────┘                  └──────────────────┘</div>
+<p>
+  Ključ: čvorovi <b>ne komuniciraju direktno</b> ni sa serverom ni sa dashboardom. Sve ide preko
+  brokera. Zato možeš da ugasiš/upališ bilo koji deo nezavisno — sistem je labavo povezan.
+</p>
+
+<!-- 7. Čvorovi -->
+<h2 class="section" id="cvorovi">7. Senzorski čvorovi — kod i objašnjenje</h2>
+<p>
+  Sva tri čvora su gotovo identična — razlikuju se samo po temi, opsegu vrednosti i jedinici.
+  Svaki je <b>publisher</b>: u beskonačnoj petlji generiše vrednost i objavljuje je na svoju temu
+  na svake 3 sekunde.
+</p>
+
+<h3>cvor1.py — temperatura</h3>
+<div class="codecap">cvor1.py</div>
+<pre><span class="k">import</span> paho.mqtt.client <span class="k">as</span> mqtt
+<span class="k">import</span> time
+<span class="k">import</span> random
+
+BROKER = <span class="s">"localhost"</span>
+TOPIC = <span class="s">"iot/cvor1/temperatura"</span>
+CLIENT_ID = <span class="s">"cvor1"</span>
+
+client = mqtt.<span class="f">Client</span>(mqtt.CallbackAPIVersion.VERSION2, CLIENT_ID)
+client.<span class="f">connect</span>(BROKER, <span class="n">1883</span>, <span class="n">60</span>)
+
+<span class="f">print</span>(<span class="s">"Cvor 1 pokrenut - saljem temperaturu..."</span>)
+
+<span class="k">while</span> <span class="k">True</span>:
+    temperatura = <span class="f">round</span>(random.<span class="f">uniform</span>(<span class="n">18.0</span>, <span class="n">28.0</span>), <span class="n">1</span>)
+    poruka = <span class="f">str</span>(temperatura)
+    client.<span class="f">publish</span>(TOPIC, poruka)
+    <span class="f">print</span>(<span class="s">f"Poslato: {temperatura}°C"</span>)
+    time.<span class="f">sleep</span>(<span class="n">3</span>)</pre>
+
+<h4>Šta radi linija po linija:</h4>
+<ul>
+  <li><code class="inline">import paho.mqtt.client</code> — biblioteka za MQTT komunikaciju u Pythonu.</li>
+  <li><code class="inline">BROKER, TOPIC, CLIENT_ID</code> — adresa brokera, tema na koju šaljemo i jedinstveno ime klijenta.</li>
+  <li><code class="inline">mqtt.Client(...VERSION2, CLIENT_ID)</code> — pravi MQTT klijenta (VERSION2 = nova verzija paho API-ja).</li>
+  <li><code class="inline">client.connect(BROKER, 1883, 60)</code> — povezivanje na broker; <code class="inline">60</code> je keepalive u sekundama.</li>
+  <li><code class="inline">while True:</code> — beskonačna petlja, čvor radi dok ga ne ugasiš.</li>
+  <li><code class="inline">random.uniform(18.0, 28.0)</code> — generiše nasumičan realan broj u opsegu; <code class="inline">round(...,1)</code> zaokružuje na 1 decimalu.</li>
+  <li><code class="inline">client.publish(TOPIC, poruka)</code> — <b>objavljuje</b> poruku na temu (šalje brokeru).</li>
+  <li><code class="inline">time.sleep(3)</code> — pauza 3 sekunde do sledećeg merenja.</li>
+</ul>
+
+<h3>cvor2.py i cvor3.py — razlike</h3>
+<p>Identičan kod, menjaju se samo tri stvari:</p>
+<table>
+  <tr><th>Čvor</th><th>TOPIC</th><th>Opseg (random.uniform)</th><th>Jedinica</th></tr>
+  <tr><td>cvor2.py (vlaga)</td><td><code class="inline">iot/cvor2/vlaga</code></td><td>40.0 – 80.0</td><td>%</td></tr>
+  <tr><td>cvor3.py (svetlost)</td><td><code class="inline">iot/cvor3/svetlost</code></td><td>100.0 – 1000.0</td><td>lux</td></tr>
+</table>
+<div class="warn">
+  <b>Važno za odbranu — ovo su simulirani podaci!</b>
+  <code class="inline">random.uniform()</code> generiše <b>nasumične</b> vrednosti — nije pravi senzor.
+  To je svesno odabrana <b>simulaciona varijanta</b> projekta (dozvoljeno: „projekti mogu biti realni
+  ili simulacioni"). Cela ostala arhitektura (MQTT, broker, obrada, baza, dashboard) je potpuno realna i
+  radila bi identično da umesto skripti pošalje podatke pravi senzor (npr. ESP32 + DHT22).
+</div>
+
+<!-- 8. Server -->
+<h2 class="section" id="server">8. Server — obrada podataka i skladištenje</h2>
+<p>
+  <code class="inline">server.py</code> je <b>subscriber</b>: pretplaćuje se na sve tri teme, i za svaku
+  primljenu poruku radi dve stvari — <b>obradu</b> (statistika + provera granica) i <b>skladištenje</b>
+  (upis u SQLite bazu <code class="inline">merenja.db</code>).
+</p>
+
+<div class="codecap">server.py</div>
+<pre><span class="k">import</span> paho.mqtt.client <span class="k">as</span> mqtt
+<span class="k">import</span> sqlite3
+<span class="k">from</span> datetime <span class="k">import</span> datetime
+
+BROKER = <span class="s">"localhost"</span>
+BAZA = <span class="s">"merenja.db"</span>
+
+<span class="c"># Konfiguracija svakog senzora: naziv, jedinica i normalan opseg za alarme</span>
+SENZORI = {
+    <span class="s">"iot/cvor1/temperatura"</span>: {<span class="s">"naziv"</span>: <span class="s">"Temperatura"</span>, <span class="s">"jedinica"</span>: <span class="s">"C"</span>,   <span class="s">"min"</span>: <span class="n">15</span>,  <span class="s">"max"</span>: <span class="n">30</span>},
+    <span class="s">"iot/cvor2/vlaga"</span>:       {<span class="s">"naziv"</span>: <span class="s">"Vlaga"</span>,       <span class="s">"jedinica"</span>: <span class="s">"%"</span>,   <span class="s">"min"</span>: <span class="n">30</span>,  <span class="s">"max"</span>: <span class="n">70</span>},
+    <span class="s">"iot/cvor3/svetlost"</span>:    {<span class="s">"naziv"</span>: <span class="s">"Svetlost"</span>,    <span class="s">"jedinica"</span>: <span class="s">"lux"</span>, <span class="s">"min"</span>: <span class="n">100</span>, <span class="s">"max"</span>: <span class="n">900</span>},
+}
+
+<span class="c"># Tekuca statistika (broj, suma, min, max) po svakom senzoru</span>
+statistika = {
+    tema: {<span class="s">"broj"</span>: <span class="n">0</span>, <span class="s">"suma"</span>: <span class="n">0.0</span>, <span class="s">"min"</span>: <span class="k">None</span>, <span class="s">"max"</span>: <span class="k">None</span>}
+    <span class="k">for</span> tema <span class="k">in</span> SENZORI
+}
+
+
+<span class="k">def</span> <span class="f">init_baza</span>():
+    veza = sqlite3.<span class="f">connect</span>(BAZA)
+    veza.<span class="f">execute</span>(<span class="s">"""
+        CREATE TABLE IF NOT EXISTS merenja (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            cvor      TEXT,
+            velicina  TEXT,
+            vrednost  REAL,
+            jedinica  TEXT,
+            status    TEXT,
+            vreme     TEXT
+        )
+    """</span>)
+    veza.<span class="f">commit</span>()
+    <span class="k">return</span> veza
+
+
+<span class="k">def</span> <span class="f">on_connect</span>(client, userdata, flags, reason_code, properties):
+    <span class="f">print</span>(<span class="s">"Server povezan na broker!"</span>)
+    <span class="k">for</span> tema <span class="k">in</span> SENZORI:
+        client.<span class="f">subscribe</span>(tema)
+        <span class="f">print</span>(<span class="s">f"Pretplacen na: {tema}"</span>)
+
+
+<span class="k">def</span> <span class="f">on_message</span>(client, userdata, msg):
+    tema = msg.topic
+    konfig = SENZORI[tema]
+    vrednost = <span class="f">float</span>(msg.payload.<span class="f">decode</span>())
+
+    <span class="c"># --- OBRADA: tekuca statistika min / max / prosek ---</span>
+    s = statistika[tema]
+    s[<span class="s">"broj"</span>] += <span class="n">1</span>
+    s[<span class="s">"suma"</span>] += vrednost
+    s[<span class="s">"min"</span>] = vrednost <span class="k">if</span> s[<span class="s">"min"</span>] <span class="k">is</span> <span class="k">None</span> <span class="k">else</span> <span class="f">min</span>(s[<span class="s">"min"</span>], vrednost)
+    s[<span class="s">"max"</span>] = vrednost <span class="k">if</span> s[<span class="s">"max"</span>] <span class="k">is</span> <span class="k">None</span> <span class="k">else</span> <span class="f">max</span>(s[<span class="s">"max"</span>], vrednost)
+    prosek = s[<span class="s">"suma"</span>] / s[<span class="s">"broj"</span>]
+
+    <span class="c"># --- OBRADA: provera granicnih vrednosti (alarm) ---</span>
+    <span class="k">if</span> vrednost &lt; konfig[<span class="s">"min"</span>] <span class="k">or</span> vrednost &gt; konfig[<span class="s">"max"</span>]:
+        status = <span class="s">"ALARM"</span>
+        upozorenje = <span class="s">f"  !!! UPOZORENJE: van opsega ({konfig['min']}-{konfig['max']} {konfig['jedinica']})"</span>
+    <span class="k">else</span>:
+        status = <span class="s">"OK"</span>
+        upozorenje = <span class="s">""</span>
+
+    <span class="c"># --- SKLADISTENJE: upis u SQLite bazu ---</span>
+    vreme = datetime.<span class="f">now</span>().<span class="f">strftime</span>(<span class="s">"%Y-%m-%d %H:%M:%S"</span>)
+    userdata.<span class="f">execute</span>(
+        <span class="s">"INSERT INTO merenja (cvor, velicina, vrednost, jedinica, status, vreme) VALUES (?, ?, ?, ?, ?, ?)"</span>,
+        (tema.<span class="f">split</span>(<span class="s">"/"</span>)[<span class="n">1</span>], konfig[<span class="s">"naziv"</span>], vrednost, konfig[<span class="s">"jedinica"</span>], status, vreme),
+    )
+    userdata.<span class="f">commit</span>()
+
+    <span class="f">print</span>(
+        <span class="s">f"[{konfig['naziv']}] {vrednost} {konfig['jedinica']}  "</span>
+        <span class="s">f"(min={s['min']}, max={s['max']}, prosek={prosek:.1f}, n={s['broj']}){upozorenje}"</span>
+    )
+
+
+baza = <span class="f">init_baza</span>()
+
+client = mqtt.<span class="f">Client</span>(mqtt.CallbackAPIVersion.VERSION2, <span class="s">"server"</span>)
+client.<span class="f">user_data_set</span>(baza)
+client.on_connect = on_connect
+client.on_message = on_message
+
+client.<span class="f">connect</span>(BROKER, <span class="n">1883</span>, <span class="n">60</span>)
+<span class="f">print</span>(<span class="s">f"Server pokrenut, podaci se cuvaju u '{BAZA}'. Cekam podatke..."</span>)
+client.<span class="f">loop_forever</span>()</pre>
+
+<h4>Ključni delovi:</h4>
+<ul>
+  <li><b>SENZORI</b> — rečnik (dictionary) sa konfiguracijom svakog čvora: naziv, jedinica i <b>normalan opseg</b> (min/max) za alarm.</li>
+  <li><b>init_baza()</b> — pravi SQLite tabelu <code class="inline">merenja</code> ako ne postoji. <code class="inline">CREATE TABLE IF NOT EXISTS</code> znači da se postojeća baza ne briše pri ponovnom pokretanju.</li>
+  <li><b>on_connect</b> — poziva se čim se server poveže; pretplaćuje se (<code class="inline">subscribe</code>) na sve tri teme.</li>
+  <li><b>on_message</b> — poziva se za <u>svaku</u> primljenu poruku. To je srce obrade:
+    <ul>
+      <li><b>Statistika:</b> ažurira broj merenja, sumu, min, max i računa prosek za taj senzor.</li>
+      <li><b>Alarm:</b> ako je vrednost van opsega → status <span class="badge b-red">ALARM</span>, inače <span class="badge b-green">OK</span>.</li>
+      <li><b>Skladištenje:</b> <code class="inline">INSERT</code> upisuje red u bazu sa vremenskom oznakom. Koristi se <b>parametrizovan upit</b> (<code class="inline">?</code>) — bezbedno, sprečava SQL injection.</li>
+    </ul>
+  </li>
+  <li><b>user_data_set(baza)</b> — prosleđuje konekciju ka bazi u callback funkcije preko parametra <code class="inline">userdata</code>.</li>
+  <li><b>loop_forever()</b> — drži klijenta aktivnim i sluša poruke u beskonačnost.</li>
+</ul>
+
+<h4>Struktura tabele <code class="inline">merenja</code></h4>
+<table>
+  <tr><th>Kolona</th><th>Tip</th><th>Opis</th></tr>
+  <tr><td>id</td><td>INTEGER</td><td>Automatski redni broj (primarni ključ).</td></tr>
+  <tr><td>cvor</td><td>TEXT</td><td>cvor1 / cvor2 / cvor3.</td></tr>
+  <tr><td>velicina</td><td>TEXT</td><td>Temperatura / Vlaga / Svetlost.</td></tr>
+  <tr><td>vrednost</td><td>REAL</td><td>Izmerena (simulirana) vrednost.</td></tr>
+  <tr><td>jedinica</td><td>TEXT</td><td>C / % / lux.</td></tr>
+  <tr><td>status</td><td>TEXT</td><td>OK ili ALARM.</td></tr>
+  <tr><td>vreme</td><td>TEXT</td><td>Vremenska oznaka upisa (YYYY-MM-DD HH:MM:SS).</td></tr>
+</table>
+<div class="tip">
+  <b>Zašto SQLite?</b> Jer je deo standardne Python biblioteke (ništa se ne instalira),
+  cela baza je jedan fajl (<code class="inline">merenja.db</code>) i ne treba poseban server.
+  Idealno za projekat ove veličine.
+</div>
+
+<!-- 9. Komunikacija -->
+<h2 class="section" id="komunikacija">9. Kako teče komunikacija (korak po korak)</h2>
+<div class="flow-step"><div class="flow-num">1</div><div><b>Čvor generiše vrednost.</b> npr. cvor1 dobije temperaturu 23.4 °C preko <code class="inline">random.uniform</code>.</div></div>
+<div class="flow-step"><div class="flow-num">2</div><div><b>Čvor objavljuje (publish).</b> <code class="inline">client.publish("iot/cvor1/temperatura", "23.4")</code> šalje poruku <u>brokeru</u> — ne direktno serveru.</div></div>
+<div class="flow-step"><div class="flow-num">3</div><div><b>Broker prima poruku.</b> Mosquitto vidi temu i proverava ko je na nju pretplaćen.</div></div>
+<div class="flow-step"><div class="flow-num">4</div><div><b>Broker prosleđuje.</b> Šalje poruku svim pretplatnicima te teme — u našem slučaju i <code class="inline">server.py</code> i Node-RED MQTT In čvoru.</div></div>
+<div class="flow-step"><div class="flow-num">5a</div><div><b>server.py</b> u <code class="inline">on_message</code> ažurira statistiku, proverava alarm i upisuje red u SQLite.</div></div>
+<div class="flow-step"><div class="flow-num">5b</div><div><b>Node-RED</b> primljenu vrednost šalje na gauge (trenutna vrednost) i chart (tačka na grafiku kroz vreme).</div></div>
+<div class="flow-step"><div class="flow-num">6</div><div><b>Dashboard se osvežava</b> u browseru u realnom vremenu (kašnjenje &lt; 1 s). Pa nazad na korak 1 posle 3 s.</div></div>
+
+<!-- 10. Dashboard -->
+<h2 class="section" id="dashboard">10. Izrada Node-RED dashboarda</h2>
+<p>Dashboard (fajl <code class="inline">flows.json</code>) napravljen je u Node-RED editoru ovako:</p>
+<ol>
+  <li>Pokrene se Node-RED (<code class="inline">node-red</code>) i otvori editor na <code class="inline">http://localhost:1880</code>.</li>
+  <li>Instalira se dashboard plugin: <i>Manage palette → Install → <code class="inline">@flowfuse/node-red-dashboard</code></i>.</li>
+  <li>Dodaju se <b>3 MQTT In</b> čvora; svaki se poveže na lokalni broker i pretplati na po jednu temu (<code class="inline">iot/cvor1/temperatura</code> itd.).</li>
+  <li>Dodaju se <b>3 ui-gauge</b> čvora (Temperatura, Vlaga, Svetlost), sa opsezima:
+    <ul>
+      <li>Temperatura: 0–50 °C</li>
+      <li>Vlaga: 0–100 %</li>
+      <li>Svetlost: 0–1000 lux</li>
+    </ul>
+  </li>
+  <li>Dodaju se <b>3 ui-chart</b> čvora (linijski grafovi) za prikaz vrednosti kroz vreme.</li>
+  <li>Svaki MQTT In se „žicom" poveže na svoj gauge <u>i</u> svoj chart (jedan ulaz → dva izlaza).</li>
+  <li>Klikne se <b>Deploy</b>. Dashboard je vidljiv na <code class="inline">http://localhost:1880/dashboard</code>.</li>
+</ol>
+<div class="note">
+  <b>Veza koda i dashboarda:</b> gauge i chart čitaju <code class="inline">msg.payload</code> — to je tačno
+  ono što čvor pošalje sa <code class="inline">client.publish(TOPIC, poruka)</code>. Tema iz MQTT In čvora
+  mora se slovo-u-slovo poklapati sa temom u Python čvoru, inače dashboard ne dobija ništa.
+</div>
+
+<!-- 11. Tehnologije -->
+<h2 class="section" id="tehnologije">11. Korišćene tehnologije</h2>
+<table>
+  <tr><th>Komponenta</th><th>Tehnologija</th><th>Uloga</th></tr>
+  <tr><td>Senzorski čvorovi</td><td>Python + paho-mqtt</td><td>Generišu i objavljuju podatke.</td></tr>
+  <tr><td>MQTT broker</td><td>Eclipse Mosquitto</td><td>Posrednik za sve poruke (port 1883).</td></tr>
+  <tr><td>Obrada i skladištenje</td><td>Python + SQLite</td><td>Statistika, alarmi, čuvanje u bazu.</td></tr>
+  <tr><td>Dashboard platforma</td><td>Node-RED</td><td>Prijem MQTT-a i vizualizacija.</td></tr>
+  <tr><td>Dashboard plugin</td><td>@flowfuse/node-red-dashboard</td><td>Gauge i chart komponente.</td></tr>
+  <tr><td>Runtime</td><td>Node.js</td><td>Okruženje u kome radi Node-RED.</td></tr>
+</table>
+<h4>Performanse</h4>
+<table>
+  <tr><th>Parametar</th><th>Vrednost</th></tr>
+  <tr><td>Interval slanja</td><td>3 sekunde po čvoru</td></tr>
+  <tr><td>Broj čvorova</td><td>3</td></tr>
+  <tr><td>Kašnjenje merenje → prikaz</td><td>&lt; 1 sekunda</td></tr>
+  <tr><td>MQTT port</td><td>1883</td></tr>
+  <tr><td>Dashboard port</td><td>1880</td></tr>
+</table>
+
+<!-- 12. Pitanja -->
+<h2 class="section" id="pitanja">12. Moguća potpitanja na odbrani</h2>
+<div class="qa">
+
+<details><summary>Da li su podaci realni?</summary>
+<p>Ne. Ovo je simulacija — čvorovi generišu nasumične (pseudoslučajne) vrednosti funkcijom
+<code class="inline">random.uniform()</code> u realnim opsezima, na svake 3 sekunde. Odabrali smo simulacionu
+varijantu, koja je dozvoljena uputstvom („projekti mogu biti realni ili simulacioni"). Sve ostalo
+(MQTT, broker, obrada, baza, dashboard) je potpuno funkcionalno i realno.</p></details>
+
+<details><summary>Šta bi trebalo da promenite da podaci budu realni?</summary>
+<p>Samo izvor podataka. Umesto Python skripti sa <code class="inline">random</code>, povezao bi se npr.
+ESP32 + DHT22 senzor koji objavljuje prava očitavanja na <b>iste teme</b> (<code class="inline">iot/cvor1/temperatura</code>…).
+Broker, server, baza i dashboard ostaju potpuno isti — to je prednost labavo povezane (decoupled) MQTT arhitekture.</p></details>
+
+<details><summary>Šta je MQTT i zašto baš on?</summary>
+<p>Lagani publish/subscribe protokol za IoT, preko TCP/IP-a (port 1883). Biran je jer ima malo
+zaglavlje (štedi resurse i bateriju), razdvaja pošiljaoce od primalaca (lako se dodaju novi uređaji)
+i nudi QoS nivoe pouzdanosti. Idealan za uređaje sa malo resursa.</p></details>
+
+<details><summary>Šta je broker i šta tačno radi?</summary>
+<p>Centralni posrednik (kod nas Mosquitto). Prima sve poruke, zna ko je na koju temu pretplaćen i
+prosleđuje svaku poruku svim pretplatnicima te teme. Pošiljalac i primalac se ne poznaju direktno.</p></details>
+
+<details><summary>Šta je publish/subscribe, a šta topic?</summary>
+<p>Publish = objavljivanje poruke na temu; subscribe = pretplata na temu. Topic (tema) je tekstualni
+hijerarhijski kanal sa nivoima razdvojenim <code class="inline">/</code> (npr. <code class="inline">iot/cvor1/temperatura</code>).
+Broker rutira poruke na osnovu teme.</p></details>
+
+<details><summary>Šta je QoS i koji koristite?</summary>
+<p>Quality of Service — nivo pouzdanosti isporuke: 0 (može da se izgubi), 1 (bar jednom, moguć duplikat),
+2 (tačno jednom). MQTT In čvorovi u Node-RED-u koriste QoS 2; Python čvorovi šalju podrazumevanim QoS 0,
+što je dovoljno za podatke na svake 3 s.</p></details>
+
+<details><summary>Koja su tri sloja IoT arhitekture i gde su kod vas?</summary>
+<p>Percepcija (čvorovi koji „mere"), mrežni/komunikacioni (MQTT + Mosquitto broker) i aplikacioni
+(server.py za obradu/skladištenje + Node-RED za vizualizaciju).</p></details>
+
+<details><summary>Kako se sistem skalira? Kako biste dodali četvrti senzor?</summary>
+<p>Napravi se <code class="inline">cvor4.py</code> sa novom temom, doda se u <code class="inline">SENZORI</code>
+rečnik u serveru i doda se MQTT In + gauge/chart u Node-RED. Postojeći čvorovi se <b>ne diraju</b> — to
+je prednost pub/sub modela.</p></details>
+
+<details><summary>Šta znači „distribuirani" senzorski čvor?</summary>
+<p>Više nezavisnih senzorskih čvorova radi paralelno i šalje podatke ka centralnoj tački (brokeru),
+umesto jednog uređaja koji sve radi. Čvorovi su distribuirani (razdvojeni), a podaci se centralizovano
+prikupljaju i prikazuju.</p></details>
+
+<details><summary>Kako se podaci skladište? Zašto SQLite?</summary>
+<p>server.py za svaku poruku radi <code class="inline">INSERT</code> u SQLite tabelu <code class="inline">merenja</code>
+sa vremenskom oznakom. SQLite je izabran jer je deo standardnog Pythona (bez instalacije), baza je jedan
+fajl i ne treba server — taman za ovaj obim.</p></details>
+
+<details><summary>Kakvu obradu radite nad podacima?</summary>
+<p>Za svaki senzor računamo tekući min, max i prosek, i proveravamo granične vrednosti — ako vrednost
+izađe iz normalnog opsega, beleži se status ALARM (npr. vlaga &gt; 70% ili svetlost &gt; 900 lux).</p></details>
+
+<details><summary>Šta se dešava ako broker padne ili se čvor isključi?</summary>
+<p>Zbog decoupling-a, ostali delovi nastavljaju da rade. Kad se čvor vrati, ponovo se poveže i nastavi da
+šalje. MQTT podržava i „Last Will" poruku kojom broker obavesti druge da je klijent nestao (kod nas nije
+konfigurisano jer nije bilo potrebno za demo).</p></details>
+
+<details><summary>Zašto interval od 3 sekunde?</summary>
+<p>Tipičan interval uzorkovanja za senzore okoline (temperatura/vlaga se sporo menjaju). Dovoljno često da
+se vidi promena uživo, a ne preopterećuje sistem. Lako se menja u <code class="inline">time.sleep(3)</code>.</p></details>
+
+<details><summary>Šta je Node-RED i zašto ste ga koristili?</summary>
+<p>Vizuelni alat za IoT tokove (na Node.js-u) gde se logika pravi povezivanjem čvorova umesto pisanja koda.
+Ubrzava razvoj aplikacionog sloja i ima gotov dashboard plugin za gauge i grafove.</p></details>
+
+<details><summary>Razlika između gauge i chart prikaza?</summary>
+<p>Gauge prikazuje <b>trenutnu</b> vrednost (kao brzinomer). Chart prikazuje <b>istoriju</b> — kako se
+vrednost menjala kroz vreme (linijski grafik).</p></details>
+
+</div>
+
+<!-- 13. Rečnik -->
+<h2 class="section" id="recnik">13. Rečnik pojmova</h2>
+<table>
+  <tr><th>Pojam</th><th>Značenje</th></tr>
+  <tr><td><b>IoT</b></td><td>Internet of Things — mreža povezanih fizičkih uređaja koji razmenjuju podatke.</td></tr>
+  <tr><td><b>MQTT</b></td><td>Lagani publish/subscribe protokol za razmenu poruka u IoT-u.</td></tr>
+  <tr><td><b>Broker</b></td><td>Centralni posrednik koji prima i prosleđuje MQTT poruke (Mosquitto).</td></tr>
+  <tr><td><b>Topic</b></td><td>Tema/kanal na koji se objavljuje i pretplaćuje.</td></tr>
+  <tr><td><b>Publish</b></td><td>Objavljivanje poruke na temu.</td></tr>
+  <tr><td><b>Subscribe</b></td><td>Pretplata na temu radi primanja poruka.</td></tr>
+  <tr><td><b>QoS</b></td><td>Quality of Service — nivo pouzdanosti isporuke (0/1/2).</td></tr>
+  <tr><td><b>Payload</b></td><td>Sadržaj (telo) MQTT poruke — kod nas izmerena vrednost.</td></tr>
+  <tr><td><b>Keepalive</b></td><td>Interval u kome klijent javlja brokeru da je živ (kod nas 60 s).</td></tr>
+  <tr><td><b>Node-RED</b></td><td>Vizuelni alat za pravljenje IoT tokova podataka.</td></tr>
+  <tr><td><b>Gauge</b></td><td>Komponenta dashboarda koja prikazuje trenutnu vrednost (merač).</td></tr>
+  <tr><td><b>Chart</b></td><td>Komponenta dashboarda koja prikazuje vrednosti kroz vreme (grafik).</td></tr>
+  <tr><td><b>SQLite</b></td><td>Laka baza podataka u jednom fajlu, deo standardnog Pythona.</td></tr>
+  <tr><td><b>Decoupling</b></td><td>Labava povezanost — pošiljalac i primalac se ne poznaju direktno.</td></tr>
+  <tr><td><b>Edge</b></td><td>Obrada podataka blizu izvora (na ivici mreže), a ne u oblaku.</td></tr>
+</table>
+
+<footer>
+  Tehnička dokumentacija projekta „Distribuirani senzorski čvor" (Tema 9) ·
+  Internet of Things · Priprema za odbranu (jun 2026).
+</footer>
+
+</main>
+</div>
+</body>
+</html>

@@ -7,6 +7,7 @@ Simulacija distribuiranog IoT sistema sa 3 senzorska cvora koji mere temperaturu
 - 3 virtuelna cvora salju podatke (temperatura, vlaga, svetlost) putem MQTT protokola
 - Mosquitto MQTT broker prima i prosledjuje podatke
 - Node-RED dashboard prikazuje podatke u realnom vremenu sa gauge-ovima i grafovima
+- server.py obradjuje podatke (min/max/prosek, upozorenja) i skladisti ih u SQLite bazu (merenja.db)
 
 ## Arhitektura
 
@@ -129,6 +130,11 @@ python cvor2.py
 python cvor3.py
 ```
 
+Opciono, u jos jednom prozoru pokreni server koji obradjuje i skladisti podatke u SQLite bazu:
+```
+python server.py
+```
+
 ### Korak 4 - Otvori dashboard
 
 ```
@@ -145,28 +151,11 @@ IoT_projekat/
 ├── cvor1.py        - Simulacija cvora 1 (temperatura)
 ├── cvor2.py        - Simulacija cvora 2 (vlaga)
 ├── cvor3.py        - Simulacija cvora 3 (svetlost)
-├── server.py       - MQTT server za debug ispis u konzoli
+├── server.py       - MQTT klijent: obrada (min/max/prosek, upozorenja) + skladistenje u SQLite
+├── merenja.db      - SQLite baza sa svim merenjima (kreira se automatski pri pokretanju server.py)
 ├── requirements.txt - Python zavisnosti
 └── README.md       - Ovo uputstvo
 ```
-
----
-
-## Resavanje problema
-
-**mosquitto nije prepoznat kao komanda:**
-Proveri da li je dodat u PATH (vidi korak 2)
-
-**pip install ne radi:**
-Pokusaj sa:
-```
-python -m pip install paho-mqtt
-```
-
-**Dashboard ne prikazuje podatke:**
-- Proveri da li su pokrenuti svi cvorovi (cvor1.py, cvor2.py, cvor3.py)
-- Proveri da li je Mosquitto pokrenut
-- U Node-RED editoru proveri da li pise "connected" ispod MQTT cvorova
 
 ---
 
@@ -176,7 +165,3 @@ python -m pip install paho-mqtt
 - Mateja Planic - 81/2022
 - Mihailo Obradovic - 79/2022
 - Aleksandar Golubovic - 43/2022
-
-## Predmet
-
-Internet of Things (IoT) - [NAZIV FAKULTETA], 2026.
