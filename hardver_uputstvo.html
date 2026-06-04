@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hardverska implementacija — Distribuirani senzorski čvor</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#162033;
+    --text:#e2e8f0; --muted:#94a3b8; --accent:#34d399; --accent2:#22d3ee;
+    --border:#334155; --code-bg:#0b1220;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:#f1f5f9; color:#0f172a; line-height:1.65;}
+  .wrap{display:flex; max-width:1400px; margin:0 auto; background:#fff;}
+  nav.toc{width:310px; flex-shrink:0; background:var(--bg); color:var(--text); position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto; padding:24px 18px;}
+  nav.toc h2{font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--accent); margin:18px 0 8px;}
+  nav.toc h2:first-child{margin-top:0;}
+  nav.toc a{display:block; color:var(--muted); text-decoration:none; font-size:14px; padding:5px 10px; border-radius:6px; transition:.15s;}
+  nav.toc a:hover{background:var(--panel); color:#fff;}
+  main{flex:1; padding:40px 56px; min-width:0;}
+  header.hero{background:linear-gradient(135deg,#059669,#0d9488); color:#fff; padding:48px 56px; margin:-40px -56px 40px;}
+  header.hero .tag{display:inline-block; background:rgba(255,255,255,.2); padding:4px 12px; border-radius:20px; font-size:13px; font-weight:600; margin-bottom:14px;}
+  header.hero h1{margin:0 0 8px; font-size:32px; line-height:1.2;}
+  header.hero p{margin:4px 0; opacity:.95;}
+  h2.section{font-size:25px; margin:48px 0 16px; padding-bottom:10px; border-bottom:3px solid var(--accent); color:#065f46;}
+  h3{font-size:20px; color:#0e7490; margin:28px 0 10px;}
+  h4{font-size:16px; color:#155e75; margin:20px 0 6px;}
+  p{margin:10px 0;}
+  ul,ol{margin:10px 0; padding-left:24px;} li{margin:7px 0;}
+  code.inline{background:#d1fae5; color:#065f46; padding:2px 6px; border-radius:4px; font-family:Consolas,Monaco,monospace; font-size:.9em;}
+  pre{background:var(--code-bg); color:#e2e8f0; padding:18px 20px; border-radius:10px; overflow-x:auto; font-family:Consolas,Monaco,"Courier New",monospace; font-size:13.5px; line-height:1.55; border:1px solid var(--border); margin:0 0 14px;}
+  pre .c{color:#64748b; font-style:italic;} pre .k{color:#c084fc;} pre .s{color:#86efac;} pre .n{color:#fca5a5;} pre .f{color:#7dd3fc;} pre .t{color:#fcd34d;}
+  .codecap{font-size:13px; background:var(--panel2); color:#cbd5e1; padding:7px 14px; border-radius:8px 8px 0 0; font-family:Consolas,monospace; margin:16px 0 0; border:1px solid var(--border); border-bottom:none; display:flex; justify-content:space-between;}
+  .codecap span{color:var(--accent);}
+  .codecap + pre{border-top-left-radius:0; border-top-right-radius:0;}
+  .note,.tip,.warn{padding:14px 18px; border-radius:8px; margin:16px 0; border-left:5px solid;}
+  .note{background:#eff6ff; border-color:#3b82f6;} .tip{background:#f0fdf4; border-color:#22c55e;} .warn{background:#fef2f2; border-color:#ef4444;}
+  .note b,.tip b,.warn b{display:block; margin-bottom:4px;}
+  table{border-collapse:collapse; width:100%; margin:16px 0; font-size:14.5px;}
+  th,td{border:1px solid #cbd5e1; padding:10px 12px; text-align:left; vertical-align:top;}
+  th{background:#065f46; color:#fff;} tr:nth-child(even) td{background:#f8fafc;}
+  .diagram{background:var(--code-bg); color:#e2e8f0; border-radius:10px; padding:24px; font-family:Consolas,monospace; font-size:13px; line-height:1.7; overflow-x:auto; white-space:pre; border:1px solid var(--border);}
+  .step{display:flex; gap:16px; margin:18px 0; align-items:flex-start;}
+  .step-num{flex-shrink:0; width:34px; height:34px; border-radius:50%; background:#059669; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px;}
+  .step-body{flex:1; min-width:0;}
+  .pin{display:inline-block; padding:2px 9px; border-radius:5px; font-family:Consolas,monospace; font-size:13px; font-weight:600;}
+  .pin-pwr{background:#fee2e2; color:#991b1b;} .pin-gnd{background:#1f2937; color:#fff;} .pin-data{background:#dbeafe; color:#1e40af;}
+  .kicker{color:#059669; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:1px;}
+  footer{margin-top:60px; padding-top:20px; border-top:1px solid #cbd5e1; color:#64748b; font-size:13px;}
+  @media (max-width:980px){nav.toc{display:none;} main{padding:24px;} header.hero{margin:-24px -24px 24px; padding:32px 24px;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc">
+  <h2>Pregled</h2>
+  <a href="#arh">0. Arhitektura i šta radi šta</a>
+  <a href="#delovi">1. Delovi sa slike</a>
+  <h2>Čvor 1 — Raspberry Pi</h2>
+  <a href="#pi-priprema">2. Priprema Raspberry Pi-ja</a>
+  <a href="#pi-veza">3. Povezivanje DHT11</a>
+  <a href="#pi-kod">4. Kod za Pi (kopiraj)</a>
+  <h2>Čvor 2 — svetlost (opciono)</h2>
+  <a href="#ard-veza">5. Povezivanje (LDR / potenciometar)</a>
+  <a href="#ard-kod">6. Arduino kod (kopiraj)</a>
+  <a href="#bridge">7. Bridge na PC-u (kopiraj)</a>
+  <a href="#bez-svetlosti">→ Ako nemaš ništa: preskoči</a>
+  <h2>Mreža i pokretanje</h2>
+  <a href="#mqtt-net">8. Mosquitto preko mreže</a>
+  <a href="#pokretanje">9. Redosled pokretanja</a>
+  <a href="#provera">10. Provera i problemi</a>
+  <a href="#nepromenjeno">11. Šta ostaje isto</a>
+</nav>
+
+<main>
+<header class="hero">
+  <span class="tag">IoT • Tema 9 • Hardverska verzija</span>
+  <h1>Implementacija sa pravim hardverom</h1>
+  <p>Raspberry Pi + DHT11 · Arduino Mega + LDR · MQTT · Node-RED</p>
+  <p>Korak-po-korak uputstvo sa kompletnim kodom za kopiranje</p>
+</header>
+
+<div class="note">
+  <b>Ideja u jednoj rečenici</b>
+  Zamenjujemo simulacione Python skripte pravim senzorima: Raspberry Pi čita DHT11 (temperatura + vlaga),
+  Arduino Mega čita LDR (svetlost). Sve šalju na <b>iste MQTT teme</b> kao i pre, pa broker, Node-RED,
+  <code class="inline">server.py</code> i baza rade bez ikakvih izmena.
+</div>
+
+<!-- 0. ARHITEKTURA -->
+<h2 class="section" id="arh">0. Arhitektura i šta radi šta</h2>
+<div class="diagram">┌──────────────────────────┐
+│  ČVOR 1: Raspberry Pi 2  │   DHT11 senzor
+│  + DHT11                 │   (temperatura + vlaga)
+│  Python (paho-mqtt)      │
+└────────────┬─────────────┘
+             │  publish preko WiFi/Ethernet
+             │  iot/cvor1/temperatura
+             │  iot/cvor2/vlaga
+             ▼
+   ┌───────────────────────────────────────┐
+   │        TVOJ RAČUNAR (PC)               │
+   │  ┌─────────────────────────────────┐  │
+   │  │  MOSQUITTO MQTT BROKER (1883)   │  │ ◀──┐
+   │  └──────────────┬──────────────────┘  │    │
+   │     ┌───────────┼───────────┐         │    │ publish
+   │     ▼           ▼           ▼         │    │ iot/cvor3/svetlost
+   │  server.py   Node-RED    (bridge)─────┼────┘
+   │  obrada +    dashboard      ▲         │
+   │  SQLite      (1880)         │ USB serial
+   └─────────────────────────────┼─────────┘
+                                 │
+                  ┌──────────────┴───────────┐
+                  │  ČVOR 2: Arduino Mega    │   LDR (foto-otpornik)
+                  │  + LDR na A0             │   (svetlost)
+                  └──────────────────────────┘</div>
+
+<table>
+  <tr><th>Uređaj</th><th>Uloga</th><th>Meri / radi</th></tr>
+  <tr><td><b>Raspberry Pi 2</b></td><td>Senzorski čvor 1 (ima OS i mrežu → šalje MQTT direktno)</td><td>DHT11 → temperatura + vlaga</td></tr>
+  <tr><td><b>Arduino Mega</b></td><td>Senzorski čvor 2 (nema mrežu → šalje preko USB serijske veze)</td><td>LDR → svetlost</td></tr>
+  <tr><td><b>PC (tvoj računar)</b></td><td>Centrala</td><td>Mosquitto broker + Node-RED + server.py + SQLite + bridge skripta</td></tr>
+</table>
+<div class="warn">
+  <b>Zašto Arduino ide „preko bridge-a"?</b>
+  Arduino Mega <u>nema</u> WiFi ni Ethernet, pa ne može sam na MQTT. Zato preko USB kabla šalje očitavanja
+  računaru, a mala Python skripta (<code class="inline">bridge_svetlost.py</code>) ih prosleđuje na MQTT temu.
+  Raspberry Pi to ne mora jer ima svoj OS i mrežu.
+</div>
+
+<!-- 1. DELOVI -->
+<h2 class="section" id="delovi">1. Delovi sa slike — šta je šta</h2>
+<table>
+  <tr><th>Na slici</th><th>Šta je</th><th>Čemu služi u projektu</th></tr>
+  <tr><td>Plava/bela kutija „MB-102" + providna kutijica sa žicama</td><td><b>Breadboard (protobord) + jumper žice</b></td><td>Spajanje senzora bez lemljenja.</td></tr>
+  <tr><td>Bela kutija sa malinom</td><td><b>Raspberry Pi 2 Model B</b></td><td>Čvor 1 — čita DHT11, šalje MQTT.</td></tr>
+  <tr><td>Mala plava pločica u antistatik kesici</td><td><b>DHT11 senzor</b> (temperatura + vlaga)</td><td>Senzor za čvor 1 (temp + vlaga).</td></tr>
+  <tr><td>Velika plava ploča „MEGA 2560"</td><td><b>Arduino Mega 2560</b></td><td>Čvor 2 — čita LDR, šalje preko USB-a.</td></tr>
+</table>
+<div class="warn">
+  <b>Za svetlost (čvor 3) imaš tri opcije — izaberi prema tome šta ti je profesor dao:</b>
+  <ul style="margin-top:8px;">
+    <li><b>Dobio si LDR (foto-otpornik)</b> → sekcija 5 (varijanta A), kod sekcije 6 i 7.</li>
+    <li><b>Dobio si potenciometar</b> (umesto senzora) → sekcija 5 (varijanta B), <u>isti</u> kod sekcije 6 i 7. Svetlost „glumiš" okretanjem dugmeta.</li>
+    <li><b>Nemaš ništa za svetlost</b> → <b>preskoči sekcije 5, 6 i 7</b> i pogledaj sekciju „Ako nemaš ništa za svetlost". Sistem radi sa 2 veličine (temperatura + vlaga).</li>
+  </ul>
+  Takođe proveri da za Raspberry Pi imaš: <b>microSD karticu</b> (verovatno u kutiji — „NOOBS"), <b>napajanje 5V micro-USB</b>,
+  i <b>mrežu</b> (Pi 2 nema WiFi → Ethernet kabl ili USB WiFi adapter), plus <b>ženski-muški (F-M) jumper žice</b>.
+</div>
+
+<!-- 2. PI PRIPREMA -->
+<h2 class="section" id="pi-priprema">2. Priprema Raspberry Pi-ja</h2>
+<div class="step"><div class="step-num">1</div><div class="step-body">
+  <b>Ubaci microSD i upali Pi.</b> Ako je kartica „NOOBS" edition, pri prvom paljenju izaberi instalaciju
+  <b>Raspberry Pi OS</b>. Poveži Pi na monitor (HDMI), tastaturu i napajanje (5V micro-USB).
+</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-body">
+  <b>Poveži Pi na istu mrežu kao PC.</b> Ethernet kablom u ruter, ili USB WiFi adapterom kroz podešavanja.
+  Obe mašine (Pi i PC) <u>moraju biti na istoj mreži</u>.
+</div></div>
+<div class="step"><div class="step-num">3</div><div class="step-body">
+  <b>Otvori terminal na Pi-ju</b> i instaliraj biblioteke:
+  <div class="codecap"><span>Terminal na Raspberry Pi</span></div>
+<pre>sudo apt update
+sudo apt install python3-pip libgpiod2 -y
+pip3 install adafruit-circuitpython-dht paho-mqtt</pre>
+  <div class="tip" style="margin-top:8px;"><b>Ako pip prijavi „externally-managed-environment":</b> dodaj na kraj
+  <code class="inline">--break-system-packages</code>, npr. <code class="inline">pip3 install adafruit-circuitpython-dht paho-mqtt --break-system-packages</code>.</div>
+</div></div>
+
+<!-- 3. PI VEZA -->
+<h2 class="section" id="pi-veza">3. Povezivanje DHT11 na Raspberry Pi</h2>
+<p>DHT11 (plavi modul) ima 3 pina, obično označena <b>+ (ili VCC)</b>, <b>OUT (ili S/DATA)</b>, <b>− (ili GND)</b>.</p>
+<table>
+  <tr><th>Pin na DHT11</th><th>Pin na Raspberry Pi</th><th>Fizički pin (broj)</th></tr>
+  <tr><td><span class="pin pin-pwr">+ / VCC</span></td><td>3.3V</td><td>pin <b>1</b></td></tr>
+  <tr><td><span class="pin pin-data">OUT / S / DATA</span></td><td>GPIO4</td><td>pin <b>7</b></td></tr>
+  <tr><td><span class="pin pin-gnd">− / GND</span></td><td>GND</td><td>pin <b>6</b></td></tr>
+</table>
+<div class="warn">
+  <b>VAŽNO — koristi 3.3V (pin 1), NE 5V!</b>
+  GPIO pinovi Raspberry Pi-ja podnose maksimalno 3.3V. Ako DHT11 napajaš sa 5V, data linija bi bila 5V i
+  mogla bi da ošteti Pi. Zato VCC ide na <b>3.3V</b>.
+</div>
+<p>Šema (preko breadboarda, koristi F-M jumper žice jer su pinovi i na Pi-ju i na modulu muški):</p>
+<div class="diagram">  Raspberry Pi (GPIO)              DHT11 modul
+  ┌─────────────────┐
+  │ pin 1  (3.3V) ──────────────────▶  +  (VCC)
+  │ pin 7  (GPIO4) ─────────────────▶  OUT (DATA)
+  │ pin 6  (GND)  ──────────────────▶  −  (GND)
+  └─────────────────┘</div>
+
+<!-- 4. PI KOD -->
+<h2 class="section" id="pi-kod">4. Kod za Raspberry Pi</h2>
+<p>Napravi na Pi-ju fajl <code class="inline">cvor_pi.py</code> i nalepi ovo. <b>Izmeni samo IP adresu</b> svog
+računara (gde radi Mosquitto) — kako je naći piše u sekciji 8.</p>
+<div class="codecap"><span>cvor_pi.py</span> (pokreće se NA Raspberry Pi-ju)</div>
+<pre><span class="k">import</span> time
+<span class="k">import</span> board
+<span class="k">import</span> adafruit_dht
+<span class="k">import</span> paho.mqtt.client <span class="k">as</span> mqtt
+
+<span class="c"># >>> IZMENI: IP adresa racunara na kome radi Mosquitto (vidi sekciju 8) <<<</span>
+BROKER = <span class="s">"192.168.1.100"</span>
+
+<span class="c"># DHT11 je na GPIO4 (fizicki pin 7)</span>
+dht = adafruit_dht.<span class="f">DHT11</span>(board.D4)
+
+client = mqtt.<span class="f">Client</span>(mqtt.CallbackAPIVersion.VERSION2, <span class="s">"cvor_pi"</span>)
+client.<span class="f">connect</span>(BROKER, <span class="n">1883</span>, <span class="n">60</span>)
+client.<span class="f">loop_start</span>()
+
+<span class="f">print</span>(<span class="s">"Cvor 1 (Raspberry Pi) pokrenut - saljem temperaturu i vlagu..."</span>)
+
+<span class="k">while</span> <span class="k">True</span>:
+    <span class="k">try</span>:
+        temperatura = dht.temperature
+        vlaga = dht.humidity
+        <span class="k">if</span> temperatura <span class="k">is</span> <span class="k">not</span> <span class="k">None</span> <span class="k">and</span> vlaga <span class="k">is</span> <span class="k">not</span> <span class="k">None</span>:
+            client.<span class="f">publish</span>(<span class="s">"iot/cvor1/temperatura"</span>, <span class="f">str</span>(temperatura))
+            client.<span class="f">publish</span>(<span class="s">"iot/cvor2/vlaga"</span>, <span class="f">str</span>(vlaga))
+            <span class="f">print</span>(<span class="s">f"Poslato -> temp: {temperatura} C, vlaga: {vlaga} %"</span>)
+    <span class="k">except</span> RuntimeError <span class="k">as</span> e:
+        <span class="c"># DHT senzori povremeno ne uspeju da procitaju - samo preskoci</span>
+        <span class="f">print</span>(<span class="s">"Greska citanja senzora:"</span>, e)
+    time.<span class="f">sleep</span>(<span class="n">3</span>)</pre>
+<h4>Pokretanje na Pi-ju:</h4>
+<div class="codecap"><span>Terminal na Raspberry Pi</span></div>
+<pre>python3 cvor_pi.py</pre>
+<div class="note"><b>Napomena o DHT11:</b> vraća cele brojeve (npr. 24 °C, 45 %) i ponekad „omane" očitavanje —
+zato je tu <code class="inline">try/except</code>. To je normalno za DHT11.</div>
+
+<!-- 5. ARDUINO VEZA -->
+<h2 class="section" id="ard-veza">5. Povezivanje na Arduino Mega <span style="font-size:15px;color:#64748b;">(opciono — samo ako imaš LDR ili potenciometar)</span></h2>
+<div class="note"><b>Obe varijante koriste isti analogni pin A0 i potpuno isti kod</b> (sekcije 6 i 7).
+Razlika je samo u žicama. Izaberi A ili B.</div>
+
+<h3>Varijanta A — LDR (foto-otpornik)</h3>
+<p>LDR je analogni — menja otpor sa svetlošću. Pravimo <b>naponski razdelnik</b> sa otpornikom
+10 kΩ i čitamo ga na analognom pinu <code class="inline">A0</code>.</p>
+<table>
+  <tr><th>Veza</th><th>Objašnjenje</th></tr>
+  <tr><td>Arduino <span class="pin pin-pwr">5V</span> → jedna noga LDR-a</td><td>Napajanje razdelnika.</td></tr>
+  <tr><td>druga noga LDR-a → Arduino <span class="pin pin-data">A0</span></td><td>Tu se čita napon.</td></tr>
+  <tr><td>ista noga (A0) → otpornik <b>10 kΩ</b> → Arduino <span class="pin pin-gnd">GND</span></td><td>Drugi deo razdelnika ka masi.</td></tr>
+</table>
+<div class="diagram">   5V ──────[ LDR ]──────┬──────[ 10kΩ ]────── GND
+                         │
+                         └──────────────────── A0  (ovde Arduino cita)</div>
+<div class="tip"><b>Ako je LDR „modul" sa 3 pina</b> (VCC/GND/AO i već ima otpornik na pločici), onda samo:
+VCC→5V, GND→GND, AO→A0, bez zasebnog otpornika.</div>
+
+<h3>Varijanta B — Potenciometar (umesto senzora)</h3>
+<p>Potenciometar je već gotov naponski razdelnik sa <b>3 pina</b> — <u>ne treba</u> dodatni otpornik.
+Okretanjem dugmeta menjaš napon na srednjem pinu, čime <b>simuliraš promenu svetlosti</b> (od 0 do 1000 „lux").</p>
+<table>
+  <tr><th>Pin potenciometra</th><th>Arduino</th><th>Objašnjenje</th></tr>
+  <tr><td>krajnji levi pin</td><td><span class="pin pin-pwr">5V</span></td><td>Napajanje.</td></tr>
+  <tr><td>srednji pin (klizač / wiper)</td><td><span class="pin pin-data">A0</span></td><td>Promenljivi napon koji se čita.</td></tr>
+  <tr><td>krajnji desni pin</td><td><span class="pin pin-gnd">GND</span></td><td>Masa.</td></tr>
+</table>
+<div class="diagram">   5V ──────┐
+            │
+        ┌───┴───┐  potenciometar
+        │  ▼▼▼  │ ◀── srednji (klizač) ─────── A0  (ovde Arduino cita)
+        └───┬───┘
+            │
+   GND ─────┘</div>
+<div class="tip"><b>Za demo:</b> okretanjem dugmeta vrednost svetlosti raste/opada uživo na dashboardu — možeš čak da
+gurneš vrednost preko 900 da pokažeš kako se okida ALARM (status iz <code class="inline">server.py</code>).
+U izveštaju/odbrani pošteno reci da je svetlost simulirana potenciometrom (ostala dva senzora su prava).</div>
+<div class="warn"><b>Bitno:</b> nezavisno od toga da li koristiš LDR ili potenciometar — <b>Arduino kod (sekcija 6) i
+bridge (sekcija 7) su POTPUNO ISTI.</b> Oba se čitaju kao analogna vrednost na A0.</div>
+
+<!-- 6. ARDUINO KOD -->
+<h2 class="section" id="ard-kod">6. Arduino kod <span style="font-size:15px;color:#64748b;">(opciono — isti za LDR i potenciometar)</span></h2>
+<p>U <b>Arduino IDE</b>: File → New, nalepi kod, izaberi ploču <i>Tools → Board → Arduino Mega 2560</i> i
+port <i>Tools → Port</i>, pa klikni <b>Upload</b> (strelica).</p>
+<div class="codecap"><span>cvor_svetlost.ino</span> (uploaduje se NA Arduino Mega)</div>
+<pre><span class="k">const int</span> LDR_PIN = A0;
+
+<span class="k">void</span> <span class="f">setup</span>() {
+  Serial.<span class="f">begin</span>(<span class="n">9600</span>);     <span class="c">// serijska komunikacija ka racunaru</span>
+}
+
+<span class="k">void</span> <span class="f">loop</span>() {
+  <span class="k">int</span> sirovo = <span class="f">analogRead</span>(LDR_PIN);          <span class="c">// vrednost 0–1023</span>
+  <span class="c">// gruba procena osvetljenja u "lux" skali 0–1000</span>
+  <span class="k">long</span> lux = <span class="f">map</span>(sirovo, <span class="n">0</span>, <span class="n">1023</span>, <span class="n">0</span>, <span class="n">1000</span>);
+  Serial.<span class="f">println</span>(lux);                       <span class="c">// posalji jednu vrednost po liniji</span>
+  <span class="f">delay</span>(<span class="n">3000</span>);                              <span class="c">// na svake 3 sekunde</span>
+}</pre>
+<div class="tip"><b>Provera:</b> u Arduino IDE otvori <i>Tools → Serial Monitor</i> (9600 baud) — treba da vidiš
+brojeve kako se ispisuju na svake 3 s. Pokrij/osvetli LDR i vrednost se menja.</div>
+<div class="warn"><b>Zatvori Serial Monitor pre pokretanja bridge-a!</b> Port može da koristi samo jedan program u isto vreme.</div>
+
+<!-- 7. BRIDGE -->
+<h2 class="section" id="bridge">7. Bridge skripta na PC-u (Arduino → MQTT) <span style="font-size:15px;color:#64748b;">(opciono)</span></h2>
+<p>Ova skripta radi <b>na tvom računaru</b>. Čita brojeve sa Arduina preko USB-a i šalje ih na MQTT temu
+<code class="inline">iot/cvor3/svetlost</code>. Prvo instaliraj <code class="inline">pyserial</code>:</p>
+<div class="codecap"><span>CMD na PC-u</span></div>
+<pre>pip install pyserial paho-mqtt</pre>
+<p>Napravi fajl <code class="inline">bridge_svetlost.py</code> u folderu projekta. <b>Izmeni COM port</b>
+(vidiš ga u Arduino IDE → Tools → Port, npr. <code class="inline">COM3</code>):</p>
+<div class="codecap"><span>bridge_svetlost.py</span> (pokreće se NA PC-u)</div>
+<pre><span class="k">import</span> serial
+<span class="k">import</span> paho.mqtt.client <span class="k">as</span> mqtt
+
+<span class="c"># >>> IZMENI: port na kome je Arduino (Arduino IDE -> Tools -> Port) <<<</span>
+PORT = <span class="s">"COM3"</span>
+BROKER = <span class="s">"localhost"</span>
+TOPIC = <span class="s">"iot/cvor3/svetlost"</span>
+
+client = mqtt.<span class="f">Client</span>(mqtt.CallbackAPIVersion.VERSION2, <span class="s">"bridge_svetlost"</span>)
+client.<span class="f">connect</span>(BROKER, <span class="n">1883</span>, <span class="n">60</span>)
+client.<span class="f">loop_start</span>()
+
+ser = serial.<span class="f">Serial</span>(PORT, <span class="n">9600</span>, timeout=<span class="n">5</span>)
+<span class="f">print</span>(<span class="s">f"Bridge pokrenut, citam Arduino sa {PORT}..."</span>)
+
+<span class="k">while</span> <span class="k">True</span>:
+    linija = ser.<span class="f">readline</span>().<span class="f">decode</span>(errors=<span class="s">"ignore"</span>).<span class="f">strip</span>()
+    <span class="k">if</span> linija:
+        <span class="k">try</span>:
+            vrednost = <span class="f">float</span>(linija)
+            client.<span class="f">publish</span>(TOPIC, <span class="f">str</span>(vrednost))
+            <span class="f">print</span>(<span class="s">f"Svetlost: {vrednost} lux -> {TOPIC}"</span>)
+        <span class="k">except</span> ValueError:
+            <span class="k">pass</span>   <span class="c"># preskoci ako linija nije broj</span></pre>
+<div class="codecap"><span>CMD na PC-u</span></div>
+<pre>python bridge_svetlost.py</pre>
+
+<!-- BEZ SVETLOSTI -->
+<h2 class="section" id="bez-svetlosti">→ Ako nemaš ništa za svetlost (preskoči čvor 2)</h2>
+<div class="tip">
+  <b>★ Preporučeno rešenje: zadrži simulaciju za svetlost (hibridni sistem)</b>
+  Ako nemaš ni LDR ni potenciometar, najbolje je da <b>ostaviš postojeći <code class="inline">cvor3.py</code></b>
+  da i dalje šalje simuliranu svetlost. Tako sve tri veličine rade na dashboardu:
+  <ul style="margin-top:8px;">
+    <li><b>Temperatura + vlaga</b> → pravi senzor (Raspberry Pi + DHT11)</li>
+    <li><b>Svetlost</b> → simulacija (<code class="inline">cvor3.py</code> na PC-u)</li>
+  </ul>
+  <code class="inline">cvor3.py</code> se već povezuje na <code class="inline">localhost</code> i šalje na
+  <code class="inline">iot/cvor3/svetlost</code> — radi <u>bez ijedne izmene</u>. Samo ga pokreneš na računaru
+  gde radi broker: <code class="inline">python cvor3.py</code> (umesto bridge-a iz koraka 5).
+  <br><br><b>Za odbranu:</b> pošteno reci da je reč o <b>hibridnom sistemu</b> — temperatura i vlaga sa pravih
+  senzora, a svetlost simulirana jer senzor nije bio dostupan. To je potpuno legitimno.
+</div>
+<p>Alternativno, ako želiš da svetlost <b>potpuno izostaviš</b>, sistem radi i sa dve prave veličine
+(temperatura + vlaga sa Raspberry Pi + DHT11).</p>
+<h4>Šta konkretno preskačeš (ako svetlost potpuno izostavljaš):</h4>
+<ul>
+  <li><b>Sekcija 5</b> (povezivanje na Arduino) — preskoči.</li>
+  <li><b>Sekcija 6</b> (Arduino kod) — preskoči.</li>
+  <li><b>Sekcija 7</b> (bridge skripta) — preskoči.</li>
+  <li>U <b>sekciji 9</b> (redosled pokretanja) preskoči <b>korak 5</b> (bridge).</li>
+</ul>
+<h4>Šta NE moraš da menjaš:</h4>
+<ul>
+  <li><b>server.py</b> — ne dira se. Pretplaćen je na sve tri teme, ali ako svetlost ne stiže, jednostavno
+  nema redova za svetlost u bazi — bez greške.</li>
+  <li><b>flows.json / dashboard</b> — može da ostane kako jeste; gauge i grafik za svetlost samo stoje prazni.</li>
+</ul>
+<div class="tip"><b>Ako želiš čistiji izgled</b> (bez praznog merača svetlosti na dashboardu): u Node-RED-u obriši
+ili onemogući (disable) tri čvora vezana za svetlost — MQTT In „Svetlost", gauge „Svetlost" i „Graf Svetlosti" —
+i klikni Deploy. Nije obavezno.</div>
+<div class="note"><b>Za odbranu:</b> reci da je sistem napravljen modularno — svaki senzor je nezavisan čvor, pa se
+broj veličina lako menja bez izmene centralnog dela (broker, obrada, baza, dashboard). To upravo i pokazuje
+princip distribuiranog sistema.</div>
+
+<!-- 8. MQTT NET -->
+<h2 class="section" id="mqtt-net">8. Mosquitto da prima konekcije preko mreže</h2>
+<p>Do sada je sve bilo na <code class="inline">localhost</code>. Sada se Raspberry Pi povezuje <b>spolja</b>, pa
+broker mora to da dozvoli.</p>
+
+<div class="step"><div class="step-num">1</div><div class="step-body">
+  <b>Nađi IP adresu PC-a.</b> U CMD-u ukucaj <code class="inline">ipconfig</code> i pogledaj <b>IPv4 Address</b>
+  (npr. <code class="inline">192.168.1.100</code>). Tu adresu upiši u <code class="inline">cvor_pi.py</code> (polje BROKER).
+  <div class="codecap"><span>CMD na PC-u</span></div>
+<pre>ipconfig</pre>
+</div></div>
+
+<div class="step"><div class="step-num">2</div><div class="step-body">
+  <b>Dozvoli mrežne konekcije u Mosquitto.</b> Napravi/izmeni fajl
+  <code class="inline">C:\Program Files\mosquitto\mosquitto.conf</code> i dodaj na kraj:
+  <div class="codecap"><span>mosquitto.conf</span></div>
+<pre>listener 1883 0.0.0.0
+allow_anonymous true</pre>
+  <div class="warn" style="margin-top:8px;"><b>Napomena:</b> <code class="inline">allow_anonymous true</code> je u redu za školski projekat na lokalnoj mreži.
+  Za pravu primenu bi se postavila lozinka.</div>
+</div></div>
+
+<div class="step"><div class="step-num">3</div><div class="step-body">
+  <b>Restartuj Mosquitto servis</b> da pokupi novu konfiguraciju. U CMD-u <b>kao administrator</b>:
+  <div class="codecap"><span>CMD (kao administrator)</span></div>
+<pre>net stop mosquitto
+net start mosquitto</pre>
+</div></div>
+
+<div class="step"><div class="step-num">4</div><div class="step-body">
+  <b>Otvori port 1883 u Windows Firewall-u</b> (inače Pi ne može da se poveže). U CMD-u kao administrator:
+  <div class="codecap"><span>CMD (kao administrator)</span></div>
+<pre>netsh advfirewall firewall add rule name="MQTT 1883" dir=in action=allow protocol=TCP localport=1883</pre>
+</div></div>
+
+<!-- 9. POKRETANJE -->
+<h2 class="section" id="pokretanje">9. Redosled pokretanja celog sistema</h2>
+<div class="step"><div class="step-num">1</div><div class="step-body"><b>PC:</b> proveri da Mosquitto radi (servis). Po potrebi <code class="inline">net start mosquitto</code>.</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-body"><b>PC:</b> pokreni Node-RED (<code class="inline">node-red</code>), importuj <code class="inline">flows.json</code>, klikni Deploy.</div></div>
+<div class="step"><div class="step-num">3</div><div class="step-body"><b>PC:</b> pokreni server za obradu/skladištenje: <code class="inline">python server.py</code>.</div></div>
+<div class="step"><div class="step-num">4</div><div class="step-body"><b>Raspberry Pi:</b> pokreni <code class="inline">python3 cvor_pi.py</code> (šalje temperaturu i vlagu).</div></div>
+<div class="step"><div class="step-num">5</div><div class="step-body"><b>PC — svetlost (izaberi jedno):</b>
+  <ul style="margin:6px 0;">
+    <li><b>LDR/potenciometar:</b> Arduino ukačen, Serial Monitor zatvoren → <code class="inline">python bridge_svetlost.py</code></li>
+    <li><b>Bez hardvera (hibrid):</b> samo pokreni simulaciju → <code class="inline">python cvor3.py</code></li>
+    <li><b>Bez svetlosti uopšte:</b> preskoči ovaj korak</li>
+  </ul>
+</div></div>
+<div class="step"><div class="step-num">6</div><div class="step-body"><b>PC:</b> otvori dashboard na <code class="inline">http://localhost:1880/dashboard</code> — sve tri veličine sada dolaze sa pravih senzora.</div></div>
+
+<!-- 10. PROVERA -->
+<h2 class="section" id="provera">10. Provera i česti problemi</h2>
+<table>
+  <tr><th>Problem</th><th>Rešenje</th></tr>
+  <tr><td>Pi ne može da se poveže na broker</td><td>Proveri IP u <code class="inline">cvor_pi.py</code>, da su Pi i PC na istoj mreži, da je port 1883 otvoren u firewall-u, i da je <code class="inline">mosquitto.conf</code> izmenjen + servis restartovan.</td></tr>
+  <tr><td>DHT11 stalno baca grešku čitanja</td><td>Proveri žice (VCC=3.3V, DATA=GPIO4, GND), da je modul dobro ubačen. Povremena greška je normalna.</td></tr>
+  <tr><td>Bridge: „could not open port COM3"</td><td>Pogrešan port (proveri u Arduino IDE) ili je Serial Monitor otvoren — zatvori ga.</td></tr>
+  <tr><td>Svetlost ne reaguje</td><td>Proveri razdelnik (LDR + 10kΩ) i da je signal na A0. Pokrij LDR rukom — vrednost mora da padne.</td></tr>
+  <tr><td>Dashboard prazan</td><td>Teme u Node-RED MQTT In čvorovima moraju biti tačno <code class="inline">iot/cvor1/temperatura</code>, <code class="inline">iot/cvor2/vlaga</code>, <code class="inline">iot/cvor3/svetlost</code>.</td></tr>
+</table>
+<div class="tip"><b>Brza provera da poruke stižu:</b> na PC-u u CMD-u
+<code class="inline">mosquitto_sub -h localhost -t "iot/#" -v</code> — videćeš sve poruke uživo.</div>
+
+<!-- 11. NEPROMENJENO -->
+<h2 class="section" id="nepromenjeno">11. Šta ostaje potpuno isto</h2>
+<p>Ovo je glavna prednost MQTT arhitekture — menjaju se samo izvori podataka (čvorovi), a ceo ostatak sistema
+ne dira se uopšte:</p>
+<ul>
+  <li><b>server.py</b> — radi identično, prima iste teme, obrađuje i upisuje u SQLite.</li>
+  <li><b>flows.json / Node-RED dashboard</b> — iste teme, isti gauge i grafovi.</li>
+  <li><b>merenja.db</b> — i dalje skladišti sva merenja (sada prava).</li>
+  <li><b>Mosquitto broker</b> — isti, samo smo dozvolili mrežne konekcije.</li>
+</ul>
+<div class="note"><b>Poenta za odbranu:</b> ovo pokazuje skalabilnost i decoupling — prešli smo sa simulacije na pravi
+hardver bez ijedne izmene u obradi, skladištenju i vizualizaciji, samo zamenom izvora podataka.</div>
+
+<footer>
+  Hardverska implementacija projekta „Distribuirani senzorski čvor" (Tema 9) · Internet of Things ·
+  Raspberry Pi + DHT11 · Arduino Mega + LDR · MQTT · Node-RED.
+</footer>
+
+</main>
+</div>
+</body>
+</html>
