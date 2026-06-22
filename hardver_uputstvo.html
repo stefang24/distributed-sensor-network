@@ -59,100 +59,292 @@
   <h2>Pregled</h2>
   <a href="#arh">0. Arhitektura i šta radi šta</a>
   <a href="#delovi">1. Delovi sa slike</a>
-  <h2>Čvor 1 — Raspberry Pi</h2>
-  <a href="#pi-priprema">2. Priprema Raspberry Pi-ja</a>
-  <a href="#pi-veza">3. Povezivanje DHT11</a>
-  <a href="#pi-kod">4. Kod za Pi (kopiraj)</a>
-  <h2>Čvor 2 — svetlost (opciono)</h2>
-  <a href="#ard-veza">5. Povezivanje (LDR / potenciometar)</a>
-  <a href="#ard-kod">6. Arduino kod (kopiraj)</a>
-  <a href="#bridge">7. Bridge na PC-u (kopiraj)</a>
-  <a href="#bez-svetlosti">→ Ako nemaš ništa: preskoči</a>
+  <h2>Osnove povezivanja</h2>
+  <a href="#breadboard">2. Breadboard i žice (konektori)</a>
+  <h2>Senzori → Arduino</h2>
+  <a href="#dht-veza">3. DHT11 preko breadboarda</a>
+  <a href="#pot-veza">4. Potenciometar preko breadboarda</a>
+  <a href="#ard-kod">5. Arduino kod (kopiraj)</a>
+  <h2>Arduino → Raspberry Pi → MQTT</h2>
+  <a href="#pi-priprema">6. Priprema Raspberry Pi-ja</a>
+  <a href="#usb-veza">7. Povezivanje Arduina na Pi (USB)</a>
+  <a href="#pi-kod">8. Kod za Pi — most ka MQTT (kopiraj)</a>
   <h2>Mreža i pokretanje</h2>
-  <a href="#mqtt-net">8. Mosquitto preko mreže</a>
-  <a href="#pokretanje">9. Redosled pokretanja</a>
-  <a href="#provera">10. Provera i problemi</a>
-  <a href="#nepromenjeno">11. Šta ostaje isto</a>
+  <a href="#mqtt-net">9. Mosquitto preko mreže</a>
+  <a href="#pokretanje">10. Redosled pokretanja</a>
+  <a href="#provera">11. Provera i problemi</a>
+  <a href="#nepromenjeno">12. Šta ostaje isto</a>
 </nav>
 
 <main>
 <header class="hero">
   <span class="tag">IoT • Tema 9 • Hardverska verzija</span>
   <h1>Implementacija sa pravim hardverom</h1>
-  <p>Raspberry Pi + DHT11 · Arduino Mega + LDR · MQTT · Node-RED</p>
+  <p>Arduino Mega (DHT11 + potenciometar) → Raspberry Pi → MQTT · Node-RED</p>
   <p>Korak-po-korak uputstvo sa kompletnim kodom za kopiranje</p>
 </header>
 
 <div class="note">
   <b>Ideja u jednoj rečenici</b>
-  Zamenjujemo simulacione Python skripte pravim senzorima: Raspberry Pi čita DHT11 (temperatura + vlaga),
-  Arduino Mega čita LDR (svetlost). Sve šalju na <b>iste MQTT teme</b> kao i pre, pa broker, Node-RED,
-  <code class="inline">server.py</code> i baza rade bez ikakvih izmena.
+  Svi senzori se preko <b>breadboarda</b> spajaju na <b>Arduino</b>: DHT11 (temperatura + vlaga) i potenciometar
+  (glumi svetlosni senzor). Arduino preko <b>USB kabla</b> šalje sva tri očitavanja <b>Raspberry Pi-ju</b>, a Pi ih
+  objavljuje na <b>iste MQTT teme</b> kao i pre — pa broker, Node-RED, <code class="inline">server.py</code> i baza rade bez ikakvih izmena.
 </div>
 
 <!-- 0. ARHITEKTURA -->
 <h2 class="section" id="arh">0. Arhitektura i šta radi šta</h2>
-<div class="diagram">┌──────────────────────────┐
-│  ČVOR 1: Raspberry Pi 2  │   DHT11 senzor
-│  + DHT11                 │   (temperatura + vlaga)
-│  Python (paho-mqtt)      │
-└────────────┬─────────────┘
-             │  publish preko WiFi/Ethernet
-             │  iot/cvor1/temperatura
-             │  iot/cvor2/vlaga
-             ▼
+<div class="diagram">┌───────────────────────────────────┐
+│  SENZORI (na breadboardu)         │
+│   • DHT11  (temperatura + vlaga)  │ ──▶ digitalni pin 2
+│   • Potenciometar (svetlost)      │ ──▶ analogni pin A0
+└────────────────┬──────────────────┘
+                 │  žice (preko breadboarda)
+                 ▼
+      ┌────────────────────────────┐
+      │  ČVOR — ARDUINO MEGA 2560  │  čita oba senzora,
+      │  cvor.ino                  │  šalje "temp,vlaga,svetlost"
+      └─────────────┬──────────────┘
+                    │  USB kabl (serijska veza)
+                    ▼
+      ┌────────────────────────────┐
+      │  RASPBERRY PI 2            │  čita Arduino preko USB-a,
+      │  cvor_pi.py (paho-mqtt)    │  objavljuje na MQTT
+      └─────────────┬──────────────┘
+                    │  publish preko WiFi/Ethernet
+                    │  iot/cvor1/temperatura
+                    │  iot/cvor2/vlaga
+                    │  iot/cvor3/svetlost
+                    ▼
    ┌───────────────────────────────────────┐
    │        TVOJ RAČUNAR (PC)               │
    │  ┌─────────────────────────────────┐  │
-   │  │  MOSQUITTO MQTT BROKER (1883)   │  │ ◀──┐
-   │  └──────────────┬──────────────────┘  │    │
-   │     ┌───────────┼───────────┐         │    │ publish
-   │     ▼           ▼           ▼         │    │ iot/cvor3/svetlost
-   │  server.py   Node-RED    (bridge)─────┼────┘
-   │  obrada +    dashboard      ▲         │
-   │  SQLite      (1880)         │ USB serial
-   └─────────────────────────────┼─────────┘
-                                 │
-                  ┌──────────────┴───────────┐
-                  │  ČVOR 2: Arduino Mega    │   LDR (foto-otpornik)
-                  │  + LDR na A0             │   (svetlost)
-                  └──────────────────────────┘</div>
+   │  │  MOSQUITTO MQTT BROKER (1883)   │  │
+   │  └──────────────┬──────────────────┘  │
+   │     ┌───────────┴───────────┐         │
+   │     ▼                       ▼         │
+   │  server.py              Node-RED      │
+   │  obrada + SQLite        dashboard(1880)│
+   └───────────────────────────────────────┘</div>
 
 <table>
   <tr><th>Uređaj</th><th>Uloga</th><th>Meri / radi</th></tr>
-  <tr><td><b>Raspberry Pi 2</b></td><td>Senzorski čvor 1 (ima OS i mrežu → šalje MQTT direktno)</td><td>DHT11 → temperatura + vlaga</td></tr>
-  <tr><td><b>Arduino Mega</b></td><td>Senzorski čvor 2 (nema mrežu → šalje preko USB serijske veze)</td><td>LDR → svetlost</td></tr>
-  <tr><td><b>PC (tvoj računar)</b></td><td>Centrala</td><td>Mosquitto broker + Node-RED + server.py + SQLite + bridge skripta</td></tr>
+  <tr><td><b>Arduino Mega 2560</b></td><td>Senzorski sloj — čita SVE senzore i šalje preko USB-a</td><td>DHT11 → temp + vlaga; potenciometar → svetlost</td></tr>
+  <tr><td><b>Raspberry Pi 2</b></td><td>Most/gateway — čita Arduino preko USB-a (ima OS i mrežu) → šalje MQTT</td><td>prosleđuje sva tri očitavanja na MQTT</td></tr>
+  <tr><td><b>PC (tvoj računar)</b></td><td>Centrala</td><td>Mosquitto broker + Node-RED + server.py + SQLite</td></tr>
 </table>
 <div class="warn">
-  <b>Zašto Arduino ide „preko bridge-a"?</b>
-  Arduino Mega <u>nema</u> WiFi ni Ethernet, pa ne može sam na MQTT. Zato preko USB kabla šalje očitavanja
-  računaru, a mala Python skripta (<code class="inline">bridge_svetlost.py</code>) ih prosleđuje na MQTT temu.
-  Raspberry Pi to ne mora jer ima svoj OS i mrežu.
+  <b>Zašto baš ovako (Arduino → Pi → MQTT)?</b>
+  Arduino ima prave <u>analogne</u> ulaze, pa lako čita i potenciometar (A0) i DHT11, ali <u>nema</u> mrežu.
+  Raspberry Pi ima OS i mrežu, ali ovde ne čita senzore direktno — služi kao <b>most</b>: prima očitavanja
+  sa Arduina preko USB-a i objavljuje ih na MQTT. Tako je podela jasna: <b>Arduino = senzorski sloj</b>,
+  <b>Raspberry Pi = mrežni sloj</b>.
 </div>
 
 <!-- 1. DELOVI -->
 <h2 class="section" id="delovi">1. Delovi sa slike — šta je šta</h2>
 <table>
   <tr><th>Na slici</th><th>Šta je</th><th>Čemu služi u projektu</th></tr>
-  <tr><td>Plava/bela kutija „MB-102" + providna kutijica sa žicama</td><td><b>Breadboard (protobord) + jumper žice</b></td><td>Spajanje senzora bez lemljenja.</td></tr>
-  <tr><td>Bela kutija sa malinom</td><td><b>Raspberry Pi 2 Model B</b></td><td>Čvor 1 — čita DHT11, šalje MQTT.</td></tr>
-  <tr><td>Mala plava pločica u antistatik kesici</td><td><b>DHT11 senzor</b> (temperatura + vlaga)</td><td>Senzor za čvor 1 (temp + vlaga).</td></tr>
-  <tr><td>Velika plava ploča „MEGA 2560"</td><td><b>Arduino Mega 2560</b></td><td>Čvor 2 — čita LDR, šalje preko USB-a.</td></tr>
+  <tr><td>Plava/bela kutija „MB-102" + providna kutijica sa žicama</td><td><b>Breadboard (protobord) + jumper žice</b></td><td>Spajanje senzora na Arduino bez lemljenja.</td></tr>
+  <tr><td>Velika plava ploča „MEGA 2560"</td><td><b>Arduino Mega 2560</b></td><td>Čvor — čita DHT11 i potenciometar, šalje preko USB-a.</td></tr>
+  <tr><td>Mala plava pločica u antistatik kesici</td><td><b>DHT11 senzor</b> (temperatura + vlaga)</td><td>Ide na breadboard pa na Arduino (digitalni pin 2).</td></tr>
+  <tr><td>Okrugli element sa dugmetom/osovinom i 3 nožice</td><td><b>Potenciometar</b></td><td>Glumi svetlosni senzor — na breadboard pa na A0.</td></tr>
+  <tr><td>Bela kutija sa malinom</td><td><b>Raspberry Pi 2 Model B</b></td><td>Most — čita Arduino preko USB-a, šalje MQTT.</td></tr>
 </table>
 <div class="warn">
-  <b>Za svetlost (čvor 3) imaš tri opcije — izaberi prema tome šta ti je profesor dao:</b>
+  <b>Proveri da imaš još i ovo:</b>
   <ul style="margin-top:8px;">
-    <li><b>Dobio si LDR (foto-otpornik)</b> → sekcija 5 (varijanta A), kod sekcije 6 i 7.</li>
-    <li><b>Dobio si potenciometar</b> (umesto senzora) → sekcija 5 (varijanta B), <u>isti</u> kod sekcije 6 i 7. Svetlost „glumiš" okretanjem dugmeta.</li>
-    <li><b>Nemaš ništa za svetlost</b> → <b>preskoči sekcije 5, 6 i 7</b> i pogledaj sekciju „Ako nemaš ništa za svetlost". Sistem radi sa 2 veličine (temperatura + vlaga).</li>
+    <li><b>USB kabl</b> Arduino ↔ Raspberry Pi (obično USB-A na USB-B „štampač" kabl — isti kojim se Arduino programira).</li>
+    <li>Za Raspberry Pi: <b>microSD karticu</b> (verovatno „NOOBS"), <b>napajanje 5V micro-USB</b>, i <b>mrežu</b>
+    (Pi 2 nema WiFi → Ethernet kabl ili USB WiFi adapter).</li>
+    <li><b>Jumper žice</b> (vidi sledeću sekciju za vrste) — najviše ti trebaju <b>muški-muški (M-M)</b> za breadboard ↔ Arduino.</li>
   </ul>
-  Takođe proveri da za Raspberry Pi imaš: <b>microSD karticu</b> (verovatno u kutiji — „NOOBS"), <b>napajanje 5V micro-USB</b>,
-  i <b>mrežu</b> (Pi 2 nema WiFi → Ethernet kabl ili USB WiFi adapter), plus <b>ženski-muški (F-M) jumper žice</b>.
 </div>
 
-<!-- 2. PI PRIPREMA -->
-<h2 class="section" id="pi-priprema">2. Priprema Raspberry Pi-ja</h2>
+<!-- 2. BREADBOARD I ŽICE -->
+<h2 class="section" id="breadboard">2. Breadboard i žice — osnove povezivanja</h2>
+<p>Pre nego što spojiš senzore, važno je da razumeš kako je breadboard spojen <b>iznutra</b> i kako se zovu krajevi žica.
+To je 90% celog povezivanja.</p>
+
+<h3>Kako je breadboard spojen iznutra</h3>
+<p>Breadboard ima dva tipa zona: <b>šine napajanja</b> (sa strane, dugačke) i <b>glavno polje</b> (sredina, sa
+slovima i brojevima). Bitno je koje rupe su međusobno spojene.</p>
+<div class="diagram">  ŠINE NAPAJANJA (idu celom DUŽINOM ploče):
+   + ●●●●●●●●●●●●●●●●●●●●●●●●  ← sve rupe ove linije su SPOJENE  (ovde dovedi 5V)
+   − ●●●●●●●●●●●●●●●●●●●●●●●●  ← sve rupe ove linije su SPOJENE  (ovde dovedi GND)
+
+  GLAVNO POLJE:
+         a  b  c  d  e   │   f  g  h  i  j
+    1    ●──●──●──●──●   │   ●──●──●──●──●     red 1: a-b-c-d-e su SPOJENE
+    2    ●──●──●──●──●   │   ●──●──●──●──●            f-g-h-i-j su SPOJENE
+    3    ●──●──●──●──●   │   ●──●──●──●──●     ali LEVA (a-e) i DESNA (f-j)
+    4    ●──●──●──●──●   │   ●──●──●──●──●     strana NISU spojene -> deli ih
+    ...                 ↑                     kanal po sredini (│)
+                     kanal</div>
+<div class="note"><b>Pravilo:</b> u glavnom polju spojeno je <u>pet rupa u istom redu, sa iste strane kanala</u>
+(npr. <code class="inline">1a–1b–1c–1d–1e</code> su jedan čvor). Tako, ako nožicu senzora staviš u <code class="inline">1a</code>,
+žicu koja ide ka njoj možeš ubosti u <code class="inline">1b</code> (ili 1c, 1d, 1e) — to je isti spoj.</div>
+
+<h3>Prvo dovedi napajanje na šine</h3>
+<p>Jednom dovedeš 5V i GND sa Arduina na bočne šine, pa onda <u>svi</u> senzori vuku napajanje odatle:</p>
+<table>
+  <tr><th>Žica</th><th>Od</th><th>Do</th></tr>
+  <tr><td>napajanje</td><td>Arduino <span class="pin pin-pwr">5V</span></td><td><span class="pin pin-pwr">+</span> šina breadboarda</td></tr>
+  <tr><td>masa</td><td>Arduino <span class="pin pin-gnd">GND</span></td><td><span class="pin pin-gnd">−</span> šina breadboarda</td></tr>
+</table>
+
+<h3>Vrste žica i nazivi krajeva (konektora)</h3>
+<p>Jumper žica ima dva kraja, a svaki kraj je ili <b>muški</b> ili <b>ženski</b>:</p>
+<table>
+  <tr><th>Naziv kraja</th><th>Kako izgleda</th><th>Gde ulazi</th></tr>
+  <tr><td><b>Muški (male)</b></td><td>tanak metalni <b>pin</b> koji štrči</td><td>u rupu breadboarda ili u ženski soket</td></tr>
+  <tr><td><b>Ženski (female)</b></td><td>plastična „čaurica" sa <b>rupom</b></td><td>naleže preko muškog pina</td></tr>
+</table>
+<p>Po kombinaciji krajeva žice se zovu:</p>
+<ul>
+  <li><b>M-M (muški-muški)</b> — oba kraja pinovi. <b>Ovo ti najviše treba</b> (breadboard ↔ Arduino).</li>
+  <li><b>M-Ž (muški-ženski)</b> — jedan pin, jedna čaurica. Za spajanje modula sa pinovima na nešto.</li>
+  <li><b>Ž-Ž (ženski-ženski)</b> — obe čaurice. Za spajanje dva pina međusobno.</li>
+</ul>
+<div class="tip"><b>Zašto baš M-M za ovaj projekat:</b> i rupe breadboarda i konektori na Arduinu primaju <u>muški</u> kraj,
+pa je žica sa dva muška kraja (M-M) tačno ono što spaja breadboard sa Arduinom. Potenciometar i DHT11 imaju muške nožice,
+pa se uglave direktno u breadboard.</div>
+
+<h3>Koje konektore gledaš na Arduinu (nazivi sekcija)</h3>
+<p>Crne plastične letvice sa rupama duž ivica Arduina zovu se <b>pin header soketi</b> (ženski konektori). Pored njih je
+na ploči odštampan naziv svake grupe — gledaj te natpise:</p>
+<div class="diagram">  ARDUINO MEGA 2560  (natpisi su odštampani na ploči):
+
+   ┌─────────────────────────────────────────────────────────┐
+   │  [ DIGITAL  (PWM~) ]   ... 5  4  3  2  1  0               │  ◀── pin 2 = DHT11 DATA
+   │                                                           │
+   │                                          USB  ──▶ ka Pi-ju│
+   │  [ POWER ]              [ ANALOG IN ]                      │
+   │  IOREF RST 3V3 5V GND   A0 A1 A2 ... A15                  │
+   │                  ▲  ▲                ▲                     │
+   │                 5V GND              A0 = potenciometar     │
+   └─────────────────────────────────────────────────────────┘</div>
+<table>
+  <tr><th>Natpis na Arduinu</th><th>Šta je tu</th><th>Koristimo</th></tr>
+  <tr><td><b>POWER</b></td><td>napajanje: 5V, 3V3, GND (ima ih više), Vin, RESET</td><td><span class="pin pin-pwr">5V</span> i <span class="pin pin-gnd">GND</span> → šine breadboarda</td></tr>
+  <tr><td><b>ANALOG IN</b></td><td>analogni ulazi A0–A15</td><td><span class="pin pin-data">A0</span> → potenciometar (klizač)</td></tr>
+  <tr><td><b>DIGITAL (PWM~)</b></td><td>digitalni pinovi 0–53</td><td><span class="pin pin-data">pin 2</span> → DHT11 DATA</td></tr>
+</table>
+<div class="note"><b>Orijentacija:</b> tačan raspored letvica varira, ali natpisi <code class="inline">POWER</code>,
+<code class="inline">ANALOG IN</code> i <code class="inline">DIGITAL</code> su uvek odštampani na samoj ploči — uvek se vodi po njima,
+ne po memoriji.</div>
+
+<!-- 3. DHT11 PREKO BREADBOARDA -->
+<h2 class="section" id="dht-veza">3. Povezivanje DHT11 preko breadboarda</h2>
+<p>DHT11 (plavi modul) ima 3 pina, obično označena <b>+ (ili VCC)</b>, <b>OUT (ili S/DATA)</b>, <b>− (ili GND)</b>.
+Uglavi modul u breadboard tako da svaka nožica bude u <u>svom redu</u> (npr. red 1, 2, 3), pa povuci žice:</p>
+<div class="step"><div class="step-num">1</div><div class="step-body">
+  <b>Uglavi DHT11 u breadboard.</b> Npr. VCC u red 1, DATA u red 2, GND u red 3 (svaka nožica svoj red, da se ne spoje).
+</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-body">
+  <b>Poveži žicama</b> (koristi M-M žice, ubodi u slobodnu rupu istog reda kao odgovarajuća nožica):
+  <table>
+    <tr><th>DHT11 nožica</th><th>Sa breadboarda ide na</th><th>Objašnjenje</th></tr>
+    <tr><td><span class="pin pin-pwr">+ / VCC</span></td><td><span class="pin pin-pwr">+</span> šina (koja je već na Arduino 5V)</td><td>Napajanje senzora.</td></tr>
+    <tr><td><span class="pin pin-data">OUT / S / DATA</span></td><td>Arduino <span class="pin pin-data">digitalni pin 2</span></td><td>Linija podataka (u kodu <code class="inline">DHT_PIN 2</code>).</td></tr>
+    <tr><td><span class="pin pin-gnd">− / GND</span></td><td><span class="pin pin-gnd">−</span> šina (koja je već na Arduino GND)</td><td>Masa.</td></tr>
+  </table>
+</div></div>
+<div class="diagram">  + šina ●──────────────● 1a   [ DHT11: VCC u 1 ]
+  − šina ●──────────────● 3a   [ DHT11: GND u 3 ]
+  Arduino pin 2 ●───────● 2a   [ DHT11: DATA u 2 ]</div>
+<div class="note">
+  <b>Na Arduino-u je 5V ispravno (za razliku od Raspberry Pi-ja).</b>
+  Arduino radi na 5V logici, pa DHT11 slobodno napajaš sa <b>5V</b> šine. (Na Pi-ju bi moralo 3.3V — ali ovde
+  senzor ne ide na Pi, nego na Arduino.)
+</div>
+<div class="tip"><b>Ako je DHT11 „goli" senzor sa 4 nožice</b> (bez pločice): dodaj pull-up otpornik <b>10 kΩ</b>
+između VCC reda i DATA reda na breadboardu. Plavi <b>moduli sa 3 pina</b> već imaju taj otpornik, pa ti ne treba dodatno.</div>
+
+<!-- 4. POTENCIOMETAR PREKO BREADBOARDA -->
+<h2 class="section" id="pot-veza">4. Povezivanje potenciometra preko breadboarda</h2>
+<p>Potenciometar je gotov <b>naponski razdelnik</b> sa <b>3 nožice</b> — <u>ne treba</u> dodatni otpornik.
+Okretanjem dugmeta menjaš napon na srednjoj nožici, čime <b>simuliraš promenu svetlosti</b> (skala 0–1000 „lux").</p>
+<div class="step"><div class="step-num">1</div><div class="step-body">
+  <b>Uglavi potenciometar u breadboard</b> tako da sve tri nožice budu u tri <u>različita reda</u> (da se ne kratko spoje).
+</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-body">
+  <b>Poveži žicama (M-M):</b>
+  <table>
+    <tr><th>Nožica potenciometra</th><th>Sa breadboarda ide na</th><th>Objašnjenje</th></tr>
+    <tr><td>krajnja leva</td><td><span class="pin pin-pwr">+</span> šina (5V)</td><td>Napajanje.</td></tr>
+    <tr><td>srednja (klizač / wiper)</td><td>Arduino <span class="pin pin-data">A0</span></td><td>Promenljivi napon koji se čita.</td></tr>
+    <tr><td>krajnja desna</td><td><span class="pin pin-gnd">−</span> šina (GND)</td><td>Masa.</td></tr>
+  </table>
+</div></div>
+<div class="diagram">   + šina ●─────────● leva nožica   ┐
+                                     │  potenciometar (uglavljen u breadboard)
+   A0     ●─────────● srednja (klizač)│  ◀── okreni dugme = menja napon na A0
+                                     │
+   − šina ●─────────● desna nožica   ┘</div>
+<div class="tip"><b>Za demo:</b> okretanjem dugmeta vrednost svetlosti raste/opada uživo na dashboardu — možeš čak da
+gurneš vrednost preko 900 da pokažeš kako se okida ALARM (status iz <code class="inline">server.py</code>).
+U izveštaju/odbrani pošteno reci da je svetlost simulirana potenciometrom (temperatura i vlaga su sa pravog senzora DHT11).</div>
+<div class="note"><b>Zajedničke šine:</b> i DHT11 i potenciometar dele <code class="inline">+</code> (5V) i
+<code class="inline">−</code> (GND) šinu breadboarda. Samo data linije idu posebno — DHT11 na pin 2, potenciometar na A0.</div>
+
+<!-- 5. ARDUINO KOD -->
+<h2 class="section" id="ard-kod">5. Arduino kod — čita oba senzora</h2>
+<p>Arduino čita DHT11 i potenciometar i šalje jednu liniju oblika <code class="inline">temperatura,vlaga,svetlost</code>
+na svake 3 sekunde. Prvo u <b>Arduino IDE</b> instaliraj biblioteku za DHT:</p>
+<div class="step"><div class="step-num">1</div><div class="step-body">
+  <b>Instaliraj DHT biblioteku.</b> U Arduino IDE: <i>Tools → Manage Libraries…</i>, ukucaj
+  <code class="inline">DHT sensor library</code> (autor <b>Adafruit</b>) i klikni Install. Kad pita za zavisnosti,
+  prihvati i <code class="inline">Adafruit Unified Sensor</code>.
+</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-body">
+  <b>Nalepi kod, izaberi ploču i port.</b> <i>File → New</i>, nalepi kod ispod, izaberi
+  <i>Tools → Board → Arduino Mega 2560</i> i <i>Tools → Port</i>, pa klikni <b>Upload</b> (strelica).
+</div></div>
+<div class="codecap"><span>cvor.ino</span> (uploaduje se NA Arduino Mega)</div>
+<pre><span class="k">#include</span> <span class="s">&lt;DHT.h&gt;</span>
+
+<span class="c">// DHT11 na digitalnom pinu 2</span>
+<span class="k">#define</span> DHT_PIN  <span class="n">2</span>
+<span class="k">#define</span> DHT_TYPE DHT11
+<span class="c">// potenciometar (svetlost) na analognom pinu A0</span>
+<span class="k">#define</span> POT_PIN  A0
+
+DHT dht(DHT_PIN, DHT_TYPE);
+
+<span class="c">// pamtimo poslednje ispravno ocitavanje (DHT11 ponekad omane)</span>
+<span class="k">float</span> lastTemp  = <span class="n">0</span>;
+<span class="k">float</span> lastVlaga = <span class="n">0</span>;
+
+<span class="k">void</span> <span class="f">setup</span>() {
+  Serial.<span class="f">begin</span>(<span class="n">9600</span>);   <span class="c">// serijska komunikacija ka Raspberry Pi-ju</span>
+  dht.<span class="f">begin</span>();
+}
+
+<span class="k">void</span> <span class="f">loop</span>() {
+  <span class="k">float</span> t = dht.<span class="f">readTemperature</span>();   <span class="c">// °C</span>
+  <span class="k">float</span> h = dht.<span class="f">readHumidity</span>();      <span class="c">// %</span>
+  <span class="k">if</span> (!<span class="f">isnan</span>(t)) lastTemp  = t;     <span class="c">// koristi novo ako je validno</span>
+  <span class="k">if</span> (!<span class="f">isnan</span>(h)) lastVlaga = h;
+
+  <span class="k">int</span> sirovo = <span class="f">analogRead</span>(POT_PIN);        <span class="c">// 0–1023</span>
+  <span class="k">long</span> lux = <span class="f">map</span>(sirovo, <span class="n">0</span>, <span class="n">1023</span>, <span class="n">0</span>, <span class="n">1000</span>); <span class="c">// skala 0–1000 "lux"</span>
+
+  <span class="c">// jedna linija: temperatura,vlaga,svetlost</span>
+  Serial.<span class="f">print</span>(lastTemp);
+  Serial.<span class="f">print</span>(<span class="s">","</span>);
+  Serial.<span class="f">print</span>(lastVlaga);
+  Serial.<span class="f">print</span>(<span class="s">","</span>);
+  Serial.<span class="f">println</span>(lux);
+
+  <span class="f">delay</span>(<span class="n">3000</span>);                          <span class="c">// na svake 3 sekunde</span>
+}</pre>
+<div class="tip"><b>Provera:</b> u Arduino IDE otvori <i>Tools → Serial Monitor</i> (9600 baud) — treba da vidiš linije tipa
+<code class="inline">24.00,45.00,512</code> na svake 3 s. Okreni dugme potenciometra — treća vrednost se menja.</div>
+<div class="warn"><b>Zatvori Serial Monitor pre nego što priključiš Arduino na Pi!</b> Serijski port može da koristi samo
+jedan program u isto vreme — ako je Serial Monitor otvoren, Pi neće moći da čita.</div>
+
+<!-- 6. PI PRIPREMA -->
+<h2 class="section" id="pi-priprema">6. Priprema Raspberry Pi-ja</h2>
 <div class="step"><div class="step-num">1</div><div class="step-body">
   <b>Ubaci microSD i upali Pi.</b> Ako je kartica „NOOBS" edition, pri prvom paljenju izaberi instalaciju
   <b>Raspberry Pi OS</b>. Poveži Pi na monitor (HDMI), tastaturu i napajanje (5V micro-USB).
@@ -162,217 +354,81 @@
   Obe mašine (Pi i PC) <u>moraju biti na istoj mreži</u>.
 </div></div>
 <div class="step"><div class="step-num">3</div><div class="step-body">
-  <b>Otvori terminal na Pi-ju</b> i instaliraj biblioteke:
+  <b>Otvori terminal na Pi-ju</b> i instaliraj biblioteke. <u>Više ne treba DHT biblioteka</u> — Pi ne čita
+  senzor direktno, samo čita Arduino preko USB-a (<code class="inline">pyserial</code>) i šalje na MQTT (<code class="inline">paho-mqtt</code>):
   <div class="codecap"><span>Terminal na Raspberry Pi</span></div>
 <pre>sudo apt update
-sudo apt install python3-pip libgpiod2 -y
-pip3 install adafruit-circuitpython-dht paho-mqtt</pre>
+sudo apt install python3-pip -y
+pip3 install pyserial paho-mqtt</pre>
   <div class="tip" style="margin-top:8px;"><b>Ako pip prijavi „externally-managed-environment":</b> dodaj na kraj
-  <code class="inline">--break-system-packages</code>, npr. <code class="inline">pip3 install adafruit-circuitpython-dht paho-mqtt --break-system-packages</code>.</div>
+  <code class="inline">--break-system-packages</code>, npr. <code class="inline">pip3 install pyserial paho-mqtt --break-system-packages</code>.</div>
 </div></div>
 
-<!-- 3. PI VEZA -->
-<h2 class="section" id="pi-veza">3. Povezivanje DHT11 na Raspberry Pi</h2>
-<p>DHT11 (plavi modul) ima 3 pina, obično označena <b>+ (ili VCC)</b>, <b>OUT (ili S/DATA)</b>, <b>− (ili GND)</b>.</p>
-<table>
-  <tr><th>Pin na DHT11</th><th>Pin na Raspberry Pi</th><th>Fizički pin (broj)</th></tr>
-  <tr><td><span class="pin pin-pwr">+ / VCC</span></td><td>3.3V</td><td>pin <b>1</b></td></tr>
-  <tr><td><span class="pin pin-data">OUT / S / DATA</span></td><td>GPIO4</td><td>pin <b>7</b></td></tr>
-  <tr><td><span class="pin pin-gnd">− / GND</span></td><td>GND</td><td>pin <b>6</b></td></tr>
-</table>
-<div class="warn">
-  <b>VAŽNO — koristi 3.3V (pin 1), NE 5V!</b>
-  GPIO pinovi Raspberry Pi-ja podnose maksimalno 3.3V. Ako DHT11 napajaš sa 5V, data linija bi bila 5V i
-  mogla bi da ošteti Pi. Zato VCC ide na <b>3.3V</b>.
-</div>
-<p>Šema (preko breadboarda, koristi F-M jumper žice jer su pinovi i na Pi-ju i na modulu muški):</p>
-<div class="diagram">  Raspberry Pi (GPIO)              DHT11 modul
-  ┌─────────────────┐
-  │ pin 1  (3.3V) ──────────────────▶  +  (VCC)
-  │ pin 7  (GPIO4) ─────────────────▶  OUT (DATA)
-  │ pin 6  (GND)  ──────────────────▶  −  (GND)
-  └─────────────────┘</div>
+<!-- 7. USB VEZA -->
+<h2 class="section" id="usb-veza">7. Povezivanje Arduina na Raspberry Pi (USB)</h2>
+<p>Sad kad je kod na Arduinu, <b>isključi Arduino iz PC-a</b> i priključi ga <b>USB kablom u Raspberry Pi</b>
+(bilo koji USB port na Pi-ju). Arduino se napaja preko tog istog USB-a i odmah počinje da šalje linije.</p>
+<div class="step"><div class="step-num">1</div><div class="step-body">
+  <b>Nađi na kom je portu Arduino na Pi-ju.</b> U terminalu Pi-ja, pre i posle uključivanja Arduina ukucaj:
+  <div class="codecap"><span>Terminal na Raspberry Pi</span></div>
+<pre>ls /dev/tty*</pre>
+  Arduino Mega se najčešće pojavi kao <code class="inline">/dev/ttyACM0</code> (kod nekih klonova
+  <code class="inline">/dev/ttyUSB0</code>). Onaj koji se <b>pojavi tek nakon</b> priključivanja Arduina je pravi.
+</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-body">
+  <b>Dozvoli korisniku pristup serijskom portu</b> (da ne dobiješ „Permission denied"):
+  <div class="codecap"><span>Terminal na Raspberry Pi</span></div>
+<pre>sudo usermod -a -G dialout $USER</pre>
+  Pa se <b>izloguj i uloguj ponovo</b> (ili restartuj Pi) da promena uđe u snagu.
+</div></div>
+<div class="tip"><b>Brza provera da podaci stižu</b> (pre MQTT-a): <code class="inline">cat /dev/ttyACM0</code> — treba da
+„curi" niz linija tipa <code class="inline">24.00,45.00,512</code>. Prekini sa <code class="inline">Ctrl+C</code>.</div>
 
-<!-- 4. PI KOD -->
-<h2 class="section" id="pi-kod">4. Kod za Raspberry Pi</h2>
-<p>Napravi na Pi-ju fajl <code class="inline">cvor_pi.py</code> i nalepi ovo. <b>Izmeni samo IP adresu</b> svog
-računara (gde radi Mosquitto) — kako je naći piše u sekciji 8.</p>
+<!-- 8. PI KOD -->
+<h2 class="section" id="pi-kod">8. Kod za Raspberry Pi — most ka MQTT</h2>
+<p>Napravi na Pi-ju fajl <code class="inline">cvor_pi.py</code> i nalepi ovo. Skripta čita linije sa Arduina,
+razdvaja ih po zarezu i objavljuje sve tri veličine na MQTT. <b>Izmeni dve stvari:</b> IP adresu računara
+(gde radi Mosquitto — vidi sekciju 9) i USB <b>PORT</b> ako nije <code class="inline">/dev/ttyACM0</code>.</p>
 <div class="codecap"><span>cvor_pi.py</span> (pokreće se NA Raspberry Pi-ju)</div>
-<pre><span class="k">import</span> time
-<span class="k">import</span> board
-<span class="k">import</span> adafruit_dht
+<pre><span class="k">import</span> serial
 <span class="k">import</span> paho.mqtt.client <span class="k">as</span> mqtt
 
-<span class="c"># >>> IZMENI: IP adresa racunara na kome radi Mosquitto (vidi sekciju 8) <<<</span>
+<span class="c"># >>> IZMENI: IP adresa racunara na kome radi Mosquitto (vidi sekciju 9) <<<</span>
 BROKER = <span class="s">"192.168.1.100"</span>
-
-<span class="c"># DHT11 je na GPIO4 (fizicki pin 7)</span>
-dht = adafruit_dht.<span class="f">DHT11</span>(board.D4)
+<span class="c"># >>> IZMENI ako treba: USB port na kome je Arduino (vidi sekciju 7) <<<</span>
+PORT   = <span class="s">"/dev/ttyACM0"</span>
 
 client = mqtt.<span class="f">Client</span>(mqtt.CallbackAPIVersion.VERSION2, <span class="s">"cvor_pi"</span>)
 client.<span class="f">connect</span>(BROKER, <span class="n">1883</span>, <span class="n">60</span>)
 client.<span class="f">loop_start</span>()
 
-<span class="f">print</span>(<span class="s">"Cvor 1 (Raspberry Pi) pokrenut - saljem temperaturu i vlagu..."</span>)
-
-<span class="k">while</span> <span class="k">True</span>:
-    <span class="k">try</span>:
-        temperatura = dht.temperature
-        vlaga = dht.humidity
-        <span class="k">if</span> temperatura <span class="k">is</span> <span class="k">not</span> <span class="k">None</span> <span class="k">and</span> vlaga <span class="k">is</span> <span class="k">not</span> <span class="k">None</span>:
-            client.<span class="f">publish</span>(<span class="s">"iot/cvor1/temperatura"</span>, <span class="f">str</span>(temperatura))
-            client.<span class="f">publish</span>(<span class="s">"iot/cvor2/vlaga"</span>, <span class="f">str</span>(vlaga))
-            <span class="f">print</span>(<span class="s">f"Poslato -> temp: {temperatura} C, vlaga: {vlaga} %"</span>)
-    <span class="k">except</span> RuntimeError <span class="k">as</span> e:
-        <span class="c"># DHT senzori povremeno ne uspeju da procitaju - samo preskoci</span>
-        <span class="f">print</span>(<span class="s">"Greska citanja senzora:"</span>, e)
-    time.<span class="f">sleep</span>(<span class="n">3</span>)</pre>
-<h4>Pokretanje na Pi-ju:</h4>
-<div class="codecap"><span>Terminal na Raspberry Pi</span></div>
-<pre>python3 cvor_pi.py</pre>
-<div class="note"><b>Napomena o DHT11:</b> vraća cele brojeve (npr. 24 °C, 45 %) i ponekad „omane" očitavanje —
-zato je tu <code class="inline">try/except</code>. To je normalno za DHT11.</div>
-
-<!-- 5. ARDUINO VEZA -->
-<h2 class="section" id="ard-veza">5. Povezivanje na Arduino Mega <span style="font-size:15px;color:#64748b;">(opciono — samo ako imaš LDR ili potenciometar)</span></h2>
-<div class="note"><b>Obe varijante koriste isti analogni pin A0 i potpuno isti kod</b> (sekcije 6 i 7).
-Razlika je samo u žicama. Izaberi A ili B.</div>
-
-<h3>Varijanta A — LDR (foto-otpornik)</h3>
-<p>LDR je analogni — menja otpor sa svetlošću. Pravimo <b>naponski razdelnik</b> sa otpornikom
-10 kΩ i čitamo ga na analognom pinu <code class="inline">A0</code>.</p>
-<table>
-  <tr><th>Veza</th><th>Objašnjenje</th></tr>
-  <tr><td>Arduino <span class="pin pin-pwr">5V</span> → jedna noga LDR-a</td><td>Napajanje razdelnika.</td></tr>
-  <tr><td>druga noga LDR-a → Arduino <span class="pin pin-data">A0</span></td><td>Tu se čita napon.</td></tr>
-  <tr><td>ista noga (A0) → otpornik <b>10 kΩ</b> → Arduino <span class="pin pin-gnd">GND</span></td><td>Drugi deo razdelnika ka masi.</td></tr>
-</table>
-<div class="diagram">   5V ──────[ LDR ]──────┬──────[ 10kΩ ]────── GND
-                         │
-                         └──────────────────── A0  (ovde Arduino cita)</div>
-<div class="tip"><b>Ako je LDR „modul" sa 3 pina</b> (VCC/GND/AO i već ima otpornik na pločici), onda samo:
-VCC→5V, GND→GND, AO→A0, bez zasebnog otpornika.</div>
-
-<h3>Varijanta B — Potenciometar (umesto senzora)</h3>
-<p>Potenciometar je već gotov naponski razdelnik sa <b>3 pina</b> — <u>ne treba</u> dodatni otpornik.
-Okretanjem dugmeta menjaš napon na srednjem pinu, čime <b>simuliraš promenu svetlosti</b> (od 0 do 1000 „lux").</p>
-<table>
-  <tr><th>Pin potenciometra</th><th>Arduino</th><th>Objašnjenje</th></tr>
-  <tr><td>krajnji levi pin</td><td><span class="pin pin-pwr">5V</span></td><td>Napajanje.</td></tr>
-  <tr><td>srednji pin (klizač / wiper)</td><td><span class="pin pin-data">A0</span></td><td>Promenljivi napon koji se čita.</td></tr>
-  <tr><td>krajnji desni pin</td><td><span class="pin pin-gnd">GND</span></td><td>Masa.</td></tr>
-</table>
-<div class="diagram">   5V ──────┐
-            │
-        ┌───┴───┐  potenciometar
-        │  ▼▼▼  │ ◀── srednji (klizač) ─────── A0  (ovde Arduino cita)
-        └───┬───┘
-            │
-   GND ─────┘</div>
-<div class="tip"><b>Za demo:</b> okretanjem dugmeta vrednost svetlosti raste/opada uživo na dashboardu — možeš čak da
-gurneš vrednost preko 900 da pokažeš kako se okida ALARM (status iz <code class="inline">server.py</code>).
-U izveštaju/odbrani pošteno reci da je svetlost simulirana potenciometrom (ostala dva senzora su prava).</div>
-<div class="warn"><b>Bitno:</b> nezavisno od toga da li koristiš LDR ili potenciometar — <b>Arduino kod (sekcija 6) i
-bridge (sekcija 7) su POTPUNO ISTI.</b> Oba se čitaju kao analogna vrednost na A0.</div>
-
-<!-- 6. ARDUINO KOD -->
-<h2 class="section" id="ard-kod">6. Arduino kod <span style="font-size:15px;color:#64748b;">(opciono — isti za LDR i potenciometar)</span></h2>
-<p>U <b>Arduino IDE</b>: File → New, nalepi kod, izaberi ploču <i>Tools → Board → Arduino Mega 2560</i> i
-port <i>Tools → Port</i>, pa klikni <b>Upload</b> (strelica).</p>
-<div class="codecap"><span>cvor_svetlost.ino</span> (uploaduje se NA Arduino Mega)</div>
-<pre><span class="k">const int</span> LDR_PIN = A0;
-
-<span class="k">void</span> <span class="f">setup</span>() {
-  Serial.<span class="f">begin</span>(<span class="n">9600</span>);     <span class="c">// serijska komunikacija ka racunaru</span>
-}
-
-<span class="k">void</span> <span class="f">loop</span>() {
-  <span class="k">int</span> sirovo = <span class="f">analogRead</span>(LDR_PIN);          <span class="c">// vrednost 0–1023</span>
-  <span class="c">// gruba procena osvetljenja u "lux" skali 0–1000</span>
-  <span class="k">long</span> lux = <span class="f">map</span>(sirovo, <span class="n">0</span>, <span class="n">1023</span>, <span class="n">0</span>, <span class="n">1000</span>);
-  Serial.<span class="f">println</span>(lux);                       <span class="c">// posalji jednu vrednost po liniji</span>
-  <span class="f">delay</span>(<span class="n">3000</span>);                              <span class="c">// na svake 3 sekunde</span>
-}</pre>
-<div class="tip"><b>Provera:</b> u Arduino IDE otvori <i>Tools → Serial Monitor</i> (9600 baud) — treba da vidiš
-brojeve kako se ispisuju na svake 3 s. Pokrij/osvetli LDR i vrednost se menja.</div>
-<div class="warn"><b>Zatvori Serial Monitor pre pokretanja bridge-a!</b> Port može da koristi samo jedan program u isto vreme.</div>
-
-<!-- 7. BRIDGE -->
-<h2 class="section" id="bridge">7. Bridge skripta na PC-u (Arduino → MQTT) <span style="font-size:15px;color:#64748b;">(opciono)</span></h2>
-<p>Ova skripta radi <b>na tvom računaru</b>. Čita brojeve sa Arduina preko USB-a i šalje ih na MQTT temu
-<code class="inline">iot/cvor3/svetlost</code>. Prvo instaliraj <code class="inline">pyserial</code>:</p>
-<div class="codecap"><span>CMD na PC-u</span></div>
-<pre>pip install pyserial paho-mqtt</pre>
-<p>Napravi fajl <code class="inline">bridge_svetlost.py</code> u folderu projekta. <b>Izmeni COM port</b>
-(vidiš ga u Arduino IDE → Tools → Port, npr. <code class="inline">COM3</code>):</p>
-<div class="codecap"><span>bridge_svetlost.py</span> (pokreće se NA PC-u)</div>
-<pre><span class="k">import</span> serial
-<span class="k">import</span> paho.mqtt.client <span class="k">as</span> mqtt
-
-<span class="c"># >>> IZMENI: port na kome je Arduino (Arduino IDE -> Tools -> Port) <<<</span>
-PORT = <span class="s">"COM3"</span>
-BROKER = <span class="s">"localhost"</span>
-TOPIC = <span class="s">"iot/cvor3/svetlost"</span>
-
-client = mqtt.<span class="f">Client</span>(mqtt.CallbackAPIVersion.VERSION2, <span class="s">"bridge_svetlost"</span>)
-client.<span class="f">connect</span>(BROKER, <span class="n">1883</span>, <span class="n">60</span>)
-client.<span class="f">loop_start</span>()
-
 ser = serial.<span class="f">Serial</span>(PORT, <span class="n">9600</span>, timeout=<span class="n">5</span>)
-<span class="f">print</span>(<span class="s">f"Bridge pokrenut, citam Arduino sa {PORT}..."</span>)
+<span class="f">print</span>(<span class="s">f"Cvor pokrenut - citam Arduino sa {PORT} i saljem na MQTT..."</span>)
 
 <span class="k">while</span> <span class="k">True</span>:
     linija = ser.<span class="f">readline</span>().<span class="f">decode</span>(errors=<span class="s">"ignore"</span>).<span class="f">strip</span>()
-    <span class="k">if</span> linija:
-        <span class="k">try</span>:
-            vrednost = <span class="f">float</span>(linija)
-            client.<span class="f">publish</span>(TOPIC, <span class="f">str</span>(vrednost))
-            <span class="f">print</span>(<span class="s">f"Svetlost: {vrednost} lux -> {TOPIC}"</span>)
-        <span class="k">except</span> ValueError:
-            <span class="k">pass</span>   <span class="c"># preskoci ako linija nije broj</span></pre>
-<div class="codecap"><span>CMD na PC-u</span></div>
-<pre>python bridge_svetlost.py</pre>
+    <span class="k">if</span> <span class="k">not</span> linija:
+        <span class="k">continue</span>
+    <span class="k">try</span>:
+        <span class="c"># Arduino salje: temperatura,vlaga,svetlost</span>
+        temperatura, vlaga, svetlost = linija.<span class="f">split</span>(<span class="s">","</span>)
+        client.<span class="f">publish</span>(<span class="s">"iot/cvor1/temperatura"</span>, temperatura)
+        client.<span class="f">publish</span>(<span class="s">"iot/cvor2/vlaga"</span>, vlaga)
+        client.<span class="f">publish</span>(<span class="s">"iot/cvor3/svetlost"</span>, svetlost)
+        <span class="f">print</span>(<span class="s">f"Poslato -> temp:{temperatura}C vlaga:{vlaga}% svetlost:{svetlost}lux"</span>)
+    <span class="k">except</span> ValueError:
+        <span class="c"># nepotpuna ili pokvarena linija - samo preskoci</span>
+        <span class="k">pass</span></pre>
+<h4>Pokretanje na Pi-ju:</h4>
+<div class="codecap"><span>Terminal na Raspberry Pi</span></div>
+<pre>python3 cvor_pi.py</pre>
+<div class="note"><b>Napomena o temama:</b> teme su namerno ostavljene iste kao u simulaciji
+(<code class="inline">iot/cvor1/temperatura</code>, <code class="inline">iot/cvor2/vlaga</code>,
+<code class="inline">iot/cvor3/svetlost</code>) — zato Node-RED, <code class="inline">server.py</code> i baza
+rade <u>bez ijedne izmene</u>.</div>
 
-<!-- BEZ SVETLOSTI -->
-<h2 class="section" id="bez-svetlosti">→ Ako nemaš ništa za svetlost (preskoči čvor 2)</h2>
-<div class="tip">
-  <b>★ Preporučeno rešenje: zadrži simulaciju za svetlost (hibridni sistem)</b>
-  Ako nemaš ni LDR ni potenciometar, najbolje je da <b>ostaviš postojeći <code class="inline">cvor3.py</code></b>
-  da i dalje šalje simuliranu svetlost. Tako sve tri veličine rade na dashboardu:
-  <ul style="margin-top:8px;">
-    <li><b>Temperatura + vlaga</b> → pravi senzor (Raspberry Pi + DHT11)</li>
-    <li><b>Svetlost</b> → simulacija (<code class="inline">cvor3.py</code> na PC-u)</li>
-  </ul>
-  <code class="inline">cvor3.py</code> se već povezuje na <code class="inline">localhost</code> i šalje na
-  <code class="inline">iot/cvor3/svetlost</code> — radi <u>bez ijedne izmene</u>. Samo ga pokreneš na računaru
-  gde radi broker: <code class="inline">python cvor3.py</code> (umesto bridge-a iz koraka 5).
-  <br><br><b>Za odbranu:</b> pošteno reci da je reč o <b>hibridnom sistemu</b> — temperatura i vlaga sa pravih
-  senzora, a svetlost simulirana jer senzor nije bio dostupan. To je potpuno legitimno.
-</div>
-<p>Alternativno, ako želiš da svetlost <b>potpuno izostaviš</b>, sistem radi i sa dve prave veličine
-(temperatura + vlaga sa Raspberry Pi + DHT11).</p>
-<h4>Šta konkretno preskačeš (ako svetlost potpuno izostavljaš):</h4>
-<ul>
-  <li><b>Sekcija 5</b> (povezivanje na Arduino) — preskoči.</li>
-  <li><b>Sekcija 6</b> (Arduino kod) — preskoči.</li>
-  <li><b>Sekcija 7</b> (bridge skripta) — preskoči.</li>
-  <li>U <b>sekciji 9</b> (redosled pokretanja) preskoči <b>korak 5</b> (bridge).</li>
-</ul>
-<h4>Šta NE moraš da menjaš:</h4>
-<ul>
-  <li><b>server.py</b> — ne dira se. Pretplaćen je na sve tri teme, ali ako svetlost ne stiže, jednostavno
-  nema redova za svetlost u bazi — bez greške.</li>
-  <li><b>flows.json / dashboard</b> — može da ostane kako jeste; gauge i grafik za svetlost samo stoje prazni.</li>
-</ul>
-<div class="tip"><b>Ako želiš čistiji izgled</b> (bez praznog merača svetlosti na dashboardu): u Node-RED-u obriši
-ili onemogući (disable) tri čvora vezana za svetlost — MQTT In „Svetlost", gauge „Svetlost" i „Graf Svetlosti" —
-i klikni Deploy. Nije obavezno.</div>
-<div class="note"><b>Za odbranu:</b> reci da je sistem napravljen modularno — svaki senzor je nezavisan čvor, pa se
-broj veličina lako menja bez izmene centralnog dela (broker, obrada, baza, dashboard). To upravo i pokazuje
-princip distribuiranog sistema.</div>
-
-<!-- 8. MQTT NET -->
-<h2 class="section" id="mqtt-net">8. Mosquitto da prima konekcije preko mreže</h2>
+<!-- 9. MQTT NET -->
+<h2 class="section" id="mqtt-net">9. Mosquitto da prima konekcije preko mreže</h2>
 <p>Do sada je sve bilo na <code class="inline">localhost</code>. Sada se Raspberry Pi povezuje <b>spolja</b>, pa
 broker mora to da dozvoli.</p>
 
@@ -406,50 +462,48 @@ net start mosquitto</pre>
 <pre>netsh advfirewall firewall add rule name="MQTT 1883" dir=in action=allow protocol=TCP localport=1883</pre>
 </div></div>
 
-<!-- 9. POKRETANJE -->
-<h2 class="section" id="pokretanje">9. Redosled pokretanja celog sistema</h2>
+<!-- 10. POKRETANJE -->
+<h2 class="section" id="pokretanje">10. Redosled pokretanja celog sistema</h2>
 <div class="step"><div class="step-num">1</div><div class="step-body"><b>PC:</b> proveri da Mosquitto radi (servis). Po potrebi <code class="inline">net start mosquitto</code>.</div></div>
 <div class="step"><div class="step-num">2</div><div class="step-body"><b>PC:</b> pokreni Node-RED (<code class="inline">node-red</code>), importuj <code class="inline">flows.json</code>, klikni Deploy.</div></div>
 <div class="step"><div class="step-num">3</div><div class="step-body"><b>PC:</b> pokreni server za obradu/skladištenje: <code class="inline">python server.py</code>.</div></div>
-<div class="step"><div class="step-num">4</div><div class="step-body"><b>Raspberry Pi:</b> pokreni <code class="inline">python3 cvor_pi.py</code> (šalje temperaturu i vlagu).</div></div>
-<div class="step"><div class="step-num">5</div><div class="step-body"><b>PC — svetlost (izaberi jedno):</b>
-  <ul style="margin:6px 0;">
-    <li><b>LDR/potenciometar:</b> Arduino ukačen, Serial Monitor zatvoren → <code class="inline">python bridge_svetlost.py</code></li>
-    <li><b>Bez hardvera (hibrid):</b> samo pokreni simulaciju → <code class="inline">python cvor3.py</code></li>
-    <li><b>Bez svetlosti uopšte:</b> preskoči ovaj korak</li>
-  </ul>
-</div></div>
-<div class="step"><div class="step-num">6</div><div class="step-body"><b>PC:</b> otvori dashboard na <code class="inline">http://localhost:1880/dashboard</code> — sve tri veličine sada dolaze sa pravih senzora.</div></div>
+<div class="step"><div class="step-num">4</div><div class="step-body"><b>Arduino:</b> kod je već uploadovan (sekcija 5). Priključi Arduino <b>USB kablom u Raspberry Pi</b> i proveri da je Serial Monitor <u>zatvoren</u>.</div></div>
+<div class="step"><div class="step-num">5</div><div class="step-body"><b>Raspberry Pi:</b> pokreni most ka MQTT: <code class="inline">python3 cvor_pi.py</code> (šalje temperaturu, vlagu i svetlost).</div></div>
+<div class="step"><div class="step-num">6</div><div class="step-body"><b>PC:</b> otvori dashboard na <code class="inline">http://localhost:1880/dashboard</code> — sve tri veličine sada dolaze sa pravog hardvera.</div></div>
 
-<!-- 10. PROVERA -->
-<h2 class="section" id="provera">10. Provera i česti problemi</h2>
+<!-- 11. PROVERA -->
+<h2 class="section" id="provera">11. Provera i česti problemi</h2>
 <table>
   <tr><th>Problem</th><th>Rešenje</th></tr>
+  <tr><td>Pi: „could not open port /dev/ttyACM0"</td><td>Pogrešan port (proveri sekcijom 7, <code class="inline">ls /dev/tty*</code>), nemaš dozvolu (<code class="inline">sudo usermod -a -G dialout $USER</code> pa relogin), ili je drugi program zauzeo port.</td></tr>
+  <tr><td>Pi ne dobija nikakve linije</td><td>Proveri da je Arduino kod uploadovan i da šalje (Serial Monitor na PC-u pokazuje brojeve), da je USB kabl ispravan, i da Serial Monitor nije ostao otvoren negde.</td></tr>
+  <tr><td>Arduino: DHT11 vraća stalno 0 / nan</td><td>Proveri žice (VCC na 5V šinu, DATA na pin 2, GND na − šinu), da su nožice u različitim redovima breadboarda, da je DHT biblioteka instalirana i tip <code class="inline">DHT11</code>. Goli senzor traži pull-up 10 kΩ.</td></tr>
+  <tr><td>Svetlost ne reagira</td><td>Proveri potenciometar: leva nožica na + šinu, desna na − šinu, srednja (klizač) na A0; sve tri u različitim redovima. Okreni dugme — treća vrednost mora da se menja.</td></tr>
+  <tr><td>Ništa ne radi / „mrtvo"</td><td>Najčešće žica nije u istom redu kao nožica (breadboard spaja samo 5 rupa u redu sa iste strane kanala), ili 5V/GND nisu dovedeni na šine. Proveri sekciju 2.</td></tr>
   <tr><td>Pi ne može da se poveže na broker</td><td>Proveri IP u <code class="inline">cvor_pi.py</code>, da su Pi i PC na istoj mreži, da je port 1883 otvoren u firewall-u, i da je <code class="inline">mosquitto.conf</code> izmenjen + servis restartovan.</td></tr>
-  <tr><td>DHT11 stalno baca grešku čitanja</td><td>Proveri žice (VCC=3.3V, DATA=GPIO4, GND), da je modul dobro ubačen. Povremena greška je normalna.</td></tr>
-  <tr><td>Bridge: „could not open port COM3"</td><td>Pogrešan port (proveri u Arduino IDE) ili je Serial Monitor otvoren — zatvori ga.</td></tr>
-  <tr><td>Svetlost ne reaguje</td><td>Proveri razdelnik (LDR + 10kΩ) i da je signal na A0. Pokrij LDR rukom — vrednost mora da padne.</td></tr>
   <tr><td>Dashboard prazan</td><td>Teme u Node-RED MQTT In čvorovima moraju biti tačno <code class="inline">iot/cvor1/temperatura</code>, <code class="inline">iot/cvor2/vlaga</code>, <code class="inline">iot/cvor3/svetlost</code>.</td></tr>
 </table>
 <div class="tip"><b>Brza provera da poruke stižu:</b> na PC-u u CMD-u
 <code class="inline">mosquitto_sub -h localhost -t "iot/#" -v</code> — videćeš sve poruke uživo.</div>
 
-<!-- 11. NEPROMENJENO -->
-<h2 class="section" id="nepromenjeno">11. Šta ostaje potpuno isto</h2>
-<p>Ovo je glavna prednost MQTT arhitekture — menjaju se samo izvori podataka (čvorovi), a ceo ostatak sistema
-ne dira se uopšte:</p>
+<!-- 12. NEPROMENJENO -->
+<h2 class="section" id="nepromenjeno">12. Šta ostaje potpuno isto</h2>
+<p>Ovo je glavna prednost MQTT arhitekture — menja se samo način prikupljanja podataka (senzori + breadboard + Arduino + Pi most),
+a ceo ostatak sistema ne dira se uopšte:</p>
 <ul>
   <li><b>server.py</b> — radi identično, prima iste teme, obrađuje i upisuje u SQLite.</li>
-  <li><b>flows.json / Node-RED dashboard</b> — iste teme, isti gauge i grafovi.</li>
+  <li><b>flows.json / Node-RED dashboard</b> — iste teme, isti gauge i grafovi (sve tri veličine).</li>
   <li><b>merenja.db</b> — i dalje skladišti sva merenja (sada prava).</li>
   <li><b>Mosquitto broker</b> — isti, samo smo dozvolili mrežne konekcije.</li>
 </ul>
 <div class="note"><b>Poenta za odbranu:</b> ovo pokazuje skalabilnost i decoupling — prešli smo sa simulacije na pravi
-hardver bez ijedne izmene u obradi, skladištenju i vizualizaciji, samo zamenom izvora podataka.</div>
+hardver bez ijedne izmene u obradi, skladištenju i vizualizaciji. Arduino je „senzorski sloj" koji preko breadboarda
+čita analogne i digitalne senzore, a Raspberry Pi je „mrežni most" koji ih objavljuje na MQTT. Temperatura i vlaga su
+sa pravog senzora (DHT11), a svetlost je simulirana potenciometrom — što se pošteno navodi.</div>
 
 <footer>
   Hardverska implementacija projekta „Distribuirani senzorski čvor" (Tema 9) · Internet of Things ·
-  Raspberry Pi + DHT11 · Arduino Mega + LDR · MQTT · Node-RED.
+  Arduino Mega (DHT11 + potenciometar) → Raspberry Pi → MQTT · Node-RED.
 </footer>
 
 </main>

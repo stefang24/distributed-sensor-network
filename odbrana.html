@@ -111,9 +111,10 @@
   <a href="#komunikacija">9. Tok komunikacije</a>
   <a href="#dashboard">10. Izrada dashboarda</a>
   <a href="#tehnologije">11. Tehnologije</a>
+  <a href="#hardver">12. Hardverska realizacija</a>
   <h2>Odbrana</h2>
-  <a href="#pitanja">12. Moguća potpitanja</a>
-  <a href="#recnik">13. Rečnik pojmova</a>
+  <a href="#pitanja">13. Moguća potpitanja</a>
+  <a href="#recnik">14. Rečnik pojmova</a>
 </nav>
 
 <!-- ============ MAIN ============ -->
@@ -130,9 +131,11 @@
 
 <div class="note">
   <b>Šta je ovaj projekat ukratko?</b>
-  Simulacioni IoT sistem: tri senzorska čvora (Python skripte) generišu vrednosti i šalju ih
-  MQTT protokolom preko Mosquitto brokera. Server ih obrađuje (min/max/prosek + upozorenja) i
-  skladišti u SQLite bazu, a Node-RED dashboard ih prikazuje u realnom vremenu (gauge + grafovi).
+  Distribuirani IoT sistem sa tri senzorska čvora, MQTT komunikacijom i prikazom u realnom vremenu.
+  Sistem je prvo napravljen kao <b>simulacija</b> (Python skripte), a zatim realizovan i sa <b>pravim
+  hardverom</b> (Arduino + Raspberry Pi; DHT11 za temperaturu i vlagu, potenciometar za svetlost).
+  Server obrađuje podatke (min/max/prosek + upozorenja) i skladišti ih u SQLite bazu, a Node-RED
+  dashboard ih prikazuje (gauge + grafovi). Hardverski deo je detaljno u <b>sekciji 12</b>.
 </div>
 
 <!-- 1. IoT -->
@@ -151,8 +154,9 @@
   <li><b>(Opciono) primena algoritama</b> — analiza, predikcija, mašinsko učenje.</li>
 </ul>
 <div class="tip">
-  <b>U našem projektu:</b> prikupljanje = 3 simulirana čvora · obrada = server.py (statistika + alarmi) ·
-  komunikacija = MQTT · skladištenje = SQLite · vizualizacija = Node-RED dashboard.
+  <b>U našem projektu:</b> prikupljanje = senzori (DHT11 + potenciometar preko Arduina; prvobitno
+  simulirane Python skripte) · obrada = server.py (statistika + alarmi) · komunikacija = MQTT ·
+  skladištenje = SQLite · vizualizacija = Node-RED dashboard.
 </div>
 
 <!-- 2. Principi i slojevi -->
@@ -549,20 +553,154 @@ client.<span class="f">loop_forever</span>()</pre>
   <tr><td>Dashboard port</td><td>1880</td></tr>
 </table>
 
-<!-- 12. Pitanja -->
-<h2 class="section" id="pitanja">12. Moguća potpitanja na odbrani</h2>
+<!-- 12. Hardverska realizacija -->
+<h2 class="section" id="hardver">12. Hardverska realizacija (finalna verzija)</h2>
+<p>
+  Projekat je <b>na kraju realizovan sa pravim hardverom</b>. Senzorski podaci se više ne generišu
+  nasumično — temperatura i vlaga su <b>prava merenja</b> sa senzora <b>DHT11</b>, dok intenzitet
+  svetlosti simulira <b>potenciometar</b> (senzor svetlosti nije bio dostupan). Ceo ostatak sistema
+  (broker, <code class="inline">server.py</code>, SQLite baza, Node-RED dashboard) ostao je
+  <u>nepromenjen</u> jer se koriste iste MQTT teme.
+</p>
+
+<h3>Komponente i uloge</h3>
+<table>
+  <tr><th>Uređaj</th><th>Uloga (sloj)</th><th>Šta radi</th></tr>
+  <tr><td><b>Arduino Mega 2560</b></td><td>Senzorski sloj</td><td>Čita DHT11 (digitalni pin 2) i potenciometar (analogni A0); šalje očitavanja preko USB-a.</td></tr>
+  <tr><td><b>Raspberry Pi 2</b></td><td>Mrežni most (gateway)</td><td>Čita Arduino preko USB serijske veze i objavljuje vrednosti na MQTT broker.</td></tr>
+  <tr><td><b>DHT11</b></td><td>Senzor</td><td>Pravo merenje temperature i vlažnosti (jedan senzor, dve veličine).</td></tr>
+  <tr><td><b>Potenciometar</b></td><td>Senzor (simulacija)</td><td>Glumi senzor svetlosti — okretanjem se menja vrednost.</td></tr>
+  <tr><td><b>Breadboard + žice</b></td><td>Povezivanje</td><td>Spaja senzore na Arduino bez lemljenja.</td></tr>
+</table>
+
+<h3>Tok podataka (hardverska verzija)</h3>
+<div class="diagram">DHT11 + potenciometar   (na breadboardu)
+        │  žice
+        ▼
+   Arduino Mega 2560  ──(USB serijski: "temp,vlaga,svetlost")──▶  Raspberry Pi 2
+                                                                       │ publish (MQTT, preko mreže)
+                                                                       ▼
+                                          Mosquitto broker ─┬─▶ server.py (obrada + SQLite)
+                                                            └─▶ Node-RED dashboard (1880)</div>
+<div class="note"><b>Podela slojeva (bitno za odbranu):</b> <b>Arduino = senzorski sloj</b> (čita analogne/digitalne
+senzore, ali nema mrežu), <b>Raspberry Pi = mrežni sloj / most</b> (ima OS i mrežu, pretvara serijske podatke
+u MQTT poruke). Teme su iste kao u simulaciji, pa aplikacioni sloj (obrada, baza, dashboard) ne primećuje razliku.</div>
+
+<h3>Kod na Arduinu — čita oba senzora</h3>
+<p>Arduino na svake 3 sekunde pošalje jednu liniju oblika <code class="inline">temperatura,vlaga,svetlost</code>
+preko serijske (USB) veze. DHT11 koristi Adafruit-ovu <code class="inline">DHT</code> biblioteku:</p>
+<div class="codecap"><span>cvor.ino</span> (Arduino Mega 2560)</div>
+<pre><span class="k">#include</span> <span class="s">&lt;DHT.h&gt;</span>
+
+<span class="c">// DHT11 na digitalnom pinu 2</span>
+<span class="k">#define</span> DHT_PIN  <span class="n">2</span>
+<span class="k">#define</span> DHT_TYPE DHT11
+<span class="c">// potenciometar (svetlost) na analognom pinu A0</span>
+<span class="k">#define</span> POT_PIN  A0
+
+DHT dht(DHT_PIN, DHT_TYPE);
+
+<span class="c">// pamtimo poslednje ispravno ocitavanje (DHT11 ponekad omane)</span>
+<span class="k">float</span> lastTemp  = <span class="n">0</span>;
+<span class="k">float</span> lastVlaga = <span class="n">0</span>;
+
+<span class="k">void</span> <span class="f">setup</span>() {
+  Serial.<span class="f">begin</span>(<span class="n">9600</span>);   <span class="c">// serijska komunikacija ka Raspberry Pi-ju</span>
+  dht.<span class="f">begin</span>();
+}
+
+<span class="k">void</span> <span class="f">loop</span>() {
+  <span class="k">float</span> t = dht.<span class="f">readTemperature</span>();   <span class="c">// °C</span>
+  <span class="k">float</span> h = dht.<span class="f">readHumidity</span>();      <span class="c">// %</span>
+  <span class="k">if</span> (!<span class="f">isnan</span>(t)) lastTemp  = t;     <span class="c">// koristi novo ako je validno</span>
+  <span class="k">if</span> (!<span class="f">isnan</span>(h)) lastVlaga = h;
+
+  <span class="k">int</span> sirovo = <span class="f">analogRead</span>(POT_PIN);        <span class="c">// 0–1023</span>
+  <span class="k">long</span> lux = <span class="f">map</span>(sirovo, <span class="n">0</span>, <span class="n">1023</span>, <span class="n">0</span>, <span class="n">1000</span>); <span class="c">// skala 0–1000 "lux"</span>
+
+  <span class="c">// jedna linija: temperatura,vlaga,svetlost</span>
+  Serial.<span class="f">print</span>(lastTemp);
+  Serial.<span class="f">print</span>(<span class="s">","</span>);
+  Serial.<span class="f">print</span>(lastVlaga);
+  Serial.<span class="f">print</span>(<span class="s">","</span>);
+  Serial.<span class="f">println</span>(lux);
+
+  <span class="f">delay</span>(<span class="n">3000</span>);                          <span class="c">// na svake 3 sekunde</span>
+}</pre>
+
+<h3>Kod na Raspberry Pi-ju — most ka MQTT</h3>
+<p>Pi čita liniju sa Arduina, razdvaja je po zarezu i objavljuje tri vrednosti na <b>iste MQTT teme</b>
+kao u simulaciji — zato server, baza i dashboard rade bez izmena:</p>
+<div class="codecap"><span>cvor_pi.py</span> (Raspberry Pi)</div>
+<pre><span class="k">import</span> serial
+<span class="k">import</span> paho.mqtt.client <span class="k">as</span> mqtt
+
+<span class="c"># IP adresa racunara na kome radi Mosquitto</span>
+BROKER = <span class="s">"192.168.1.100"</span>
+<span class="c"># USB port na kome je Arduino (na Pi-ju obicno /dev/ttyACM0)</span>
+PORT   = <span class="s">"/dev/ttyACM0"</span>
+
+client = mqtt.<span class="f">Client</span>(mqtt.CallbackAPIVersion.VERSION2, <span class="s">"cvor_pi"</span>)
+client.<span class="f">connect</span>(BROKER, <span class="n">1883</span>, <span class="n">60</span>)
+client.<span class="f">loop_start</span>()
+
+ser = serial.<span class="f">Serial</span>(PORT, <span class="n">9600</span>, timeout=<span class="n">5</span>)
+<span class="f">print</span>(<span class="s">f"Cvor pokrenut - citam Arduino sa {PORT} i saljem na MQTT..."</span>)
+
+<span class="k">while</span> <span class="k">True</span>:
+    linija = ser.<span class="f">readline</span>().<span class="f">decode</span>(errors=<span class="s">"ignore"</span>).<span class="f">strip</span>()
+    <span class="k">if</span> <span class="k">not</span> linija:
+        <span class="k">continue</span>
+    <span class="k">try</span>:
+        <span class="c"># Arduino salje: temperatura,vlaga,svetlost</span>
+        temperatura, vlaga, svetlost = linija.<span class="f">split</span>(<span class="s">","</span>)
+        client.<span class="f">publish</span>(<span class="s">"iot/cvor1/temperatura"</span>, temperatura)
+        client.<span class="f">publish</span>(<span class="s">"iot/cvor2/vlaga"</span>, vlaga)
+        client.<span class="f">publish</span>(<span class="s">"iot/cvor3/svetlost"</span>, svetlost)
+        <span class="f">print</span>(<span class="s">f"Poslato -> temp:{temperatura}C vlaga:{vlaga}% svetlost:{svetlost}lux"</span>)
+    <span class="k">except</span> ValueError:
+        <span class="c"># nepotpuna ili pokvarena linija - samo preskoci</span>
+        <span class="k">pass</span></pre>
+<div class="tip"><b>Zašto baš ovako (Arduino + Pi)?</b> Arduino ima prave analogne ulaze (lako čita potenciometar i DHT11)
+ali nema mrežu; Raspberry Pi ima mrežu pa se koristi kao most ka MQTT-u. Svaki uređaj radi ono u čemu je najbolji,
+a podela na senzorski i mrežni sloj je jasna.</div>
+
+<!-- 13. Pitanja -->
+<h2 class="section" id="pitanja">13. Moguća potpitanja na odbrani</h2>
 <div class="qa">
 
 <details><summary>Da li su podaci realni?</summary>
-<p>Ne. Ovo je simulacija — čvorovi generišu nasumične (pseudoslučajne) vrednosti funkcijom
-<code class="inline">random.uniform()</code> u realnim opsezima, na svake 3 sekunde. Odabrali smo simulacionu
-varijantu, koja je dozvoljena uputstvom („projekti mogu biti realni ili simulacioni"). Sve ostalo
-(MQTT, broker, obrada, baza, dashboard) je potpuno funkcionalno i realno.</p></details>
+<p>Sistem je <b>hibridan</b>. Temperatura i vlaga su <b>prava merenja</b> sa senzora DHT11. Svetlost je
+<b>simulirana potenciometrom</b> (senzor svetlosti nije bio dostupan), pa se okretanjem dugmeta menja
+vrednost. To pošteno navodimo. Cela arhitektura (MQTT, broker, obrada, baza, dashboard) je realna i
+funkcionalna. (Postoji i prvobitna potpuno simulaciona verzija sa Python skriptama.)</p></details>
 
-<details><summary>Šta bi trebalo da promenite da podaci budu realni?</summary>
-<p>Samo izvor podataka. Umesto Python skripti sa <code class="inline">random</code>, povezao bi se npr.
-ESP32 + DHT22 senzor koji objavljuje prava očitavanja na <b>iste teme</b> (<code class="inline">iot/cvor1/temperatura</code>…).
-Broker, server, baza i dashboard ostaju potpuno isti — to je prednost labavo povezane (decoupled) MQTT arhitekture.</p></details>
+<details><summary>Kako su senzori fizički povezani?</summary>
+<p>DHT11 i potenciometar su na breadboardu i ožičeni na Arduino Mega: DHT11 na digitalni pin 2,
+potenciometar (srednja nožica / klizač) na analogni ulaz A0; napajanje 5V i GND idu sa Arduina na
+šine breadboarda. Arduino je USB kablom povezan na Raspberry Pi.</p></details>
+
+<details><summary>Zašto i Arduino i Raspberry Pi — čemu služi svaki?</summary>
+<p>Arduino ima prave analogne ulaze pa lako čita potenciometar i DHT11, ali nema mrežu. Raspberry Pi
+ima OS i mrežu, pa služi kao <b>most (gateway)</b>: čita Arduino preko USB serijske veze i objavljuje
+podatke na MQTT. Dakle Arduino = senzorski sloj, Pi = mrežni sloj.</p></details>
+
+<details><summary>Kako podaci stižu sa Arduina do MQTT-a?</summary>
+<p>Arduino na svake 3 s preko USB-a (serijski, 9600 baud) pošalje jednu liniju
+<code class="inline">temperatura,vlaga,svetlost</code>. Skripta <code class="inline">cvor_pi.py</code> na Pi-ju
+tu liniju pročita, razdvoji po zarezu i objavi tri vrednosti na teme
+<code class="inline">iot/cvor1/temperatura</code>, <code class="inline">iot/cvor2/vlaga</code> i
+<code class="inline">iot/cvor3/svetlost</code>.</p></details>
+
+<details><summary>Zašto svetlost simulirate potenciometrom?</summary>
+<p>Senzor svetlosti (npr. LDR ili BH1750) nije bio dostupan. Potenciometar je naponski razdelnik koji
+na A0 daje promenljiv napon (sirovo 0–1023), koji mapiramo na 0–1000 „lux". Princip očitavanja analognog
+senzora je identičan — samo vrednost zadajemo ručno okretanjem dugmeta.</p></details>
+
+<details><summary>Da li je zbog hardvera trebalo menjati server.py, bazu ili dashboard?</summary>
+<p>Ne. Pošto Pi objavljuje na iste MQTT teme kao ranije simulacione skripte, broker,
+<code class="inline">server.py</code>, SQLite baza i Node-RED dashboard rade bez ijedne izmene. To je
+glavna prednost labavo povezane (decoupled) arhitekture i dobar argument na odbrani.</p></details>
 
 <details><summary>Šta je MQTT i zašto baš on?</summary>
 <p>Lagani publish/subscribe protokol za IoT, preko TCP/IP-a (port 1883). Biran je jer ima malo
@@ -626,7 +764,7 @@ vrednost menjala kroz vreme (linijski grafik).</p></details>
 </div>
 
 <!-- 13. Rečnik -->
-<h2 class="section" id="recnik">13. Rečnik pojmova</h2>
+<h2 class="section" id="recnik">14. Rečnik pojmova</h2>
 <table>
   <tr><th>Pojam</th><th>Značenje</th></tr>
   <tr><td><b>IoT</b></td><td>Internet of Things — mreža povezanih fizičkih uređaja koji razmenjuju podatke.</td></tr>
